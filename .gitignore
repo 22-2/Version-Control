@@ -3,9 +3,13 @@ node_modules/
 
 # Build output
 build/
+.tsbuildinfo
 
 # Obsidian-specific
 .obsidian/
+data.json
+main.js
+styles.css
 
 # IDE settings
 .vscode/
