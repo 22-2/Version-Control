@@ -591,3 +591,69 @@ export const switchBranch = (newBranchName: string): AppThunk => async (dispatch
         uiService.showNotice(`Failed to switch branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 };
+// --- version-manager.thunks.ts ファイルに追加 ---
+
+// ... 既存の restoreVersion Thunk の後 ...
+
+export const requestReplaceVersionWithCurrentNoteContent = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const state = getState();
+    if (state.status !== AppStatus.READY) return;
+
+    const file = state.file;
+    if (!file) return;
+
+    const versionLabel = version.name ? `"${version.name}" (V${version.versionNumber})` : `Version ${version.versionNumber}`;
+    dispatch(actions.openPanel({
+        type: 'confirmation',
+        title: "Confirm Replace Content",
+        message: `This will permanently replace the content of ${versionLabel} with the current content of "${file.basename}". This action cannot be undone. Are you sure?`,
+        onConfirmAction: replaceVersionContent(version.id),
+    }));
+};
+
+export const replaceVersionContent = (versionId: string): AppThunk => async (dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const uiService = container.get<UIService>(TYPES.UIService);
+    const initialState = getState();
+    if (initialState.isRenaming) {
+        uiService.showNotice("Cannot replace version content while database is being renamed.");
+        return;
+    }
+
+    const versionManager = container.get<VersionManager>(TYPES.VersionManager);
+    const app = container.get<App>(TYPES.App);
+
+    if (initialState.status !== AppStatus.READY) return;
+
+    const initialFileFromState = initialState.file;
+    const initialNoteIdFromState = initialState.noteId;
+    if (!initialFileFromState || !initialNoteIdFromState) return;
+
+    dispatch(actions.setProcessing(true));
+    dispatch(actions.closePanel());
+
+    try {
+        const liveFile = app.vault.getAbstractFileByPath(initialFileFromState.path);
+        if (!(liveFile instanceof TFile)) {
+            throw new Error(`Action failed. Note "${initialFileFromState.basename}" may have been deleted or moved.`);
+        }
+
+        const currentContent = await app.vault.read(liveFile);
+
+        await versionManager.replaceVersionContentWith(initialNoteIdFromState, versionId, currentContent);
+
+        uiService.showNotice(`Successfully replaced content of version ${versionId.substring(0,6)}...`);
+
+        // Reload history to show the updated size
+        dispatch(loadHistoryForNoteId(initialFileFromState, initialNoteIdFromState));
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        console.error("Version Control: Error in replaceVersionContent thunk.", error);
+        uiService.showNotice(`Replace failed: ${message}`, 7000);
+        if (!isPluginUnloading(container)) {
+            dispatch(initializeView());
+        }
+    }
+};

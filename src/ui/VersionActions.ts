@@ -63,4 +63,11 @@ export const versionActions: VersionActionConfig[] = [
         isDanger: true, 
         actionHandler: (version, store) => store.dispatch(thunks.requestDelete(version)),
     },
+    {
+        id: "replace",
+        title: "Replace this version with current note",
+        icon: "refresh-cw",
+        tooltip: "Replace the content of this version with the current note content",
+        actionHandler: (version, store) => store.dispatch(thunks.requestReplaceVersionWithCurrentNoteContent(version)),
+    }
 ];

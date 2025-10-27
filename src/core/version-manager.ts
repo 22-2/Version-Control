@@ -231,6 +231,48 @@ export class VersionManager {
     }
   }
 
+
+  /**
+   * Replaces the content of a specific historical version with new content.
+   * This is useful for correcting a past version without changing its timestamp or version number.
+   * @param noteId The ID of the note.
+   * @param versionId The ID of the version to replace.
+   * @param newContent The new content to write for the version.
+   */
+  public async replaceVersionContentWith(noteId: string, versionId: string, newContent: string): Promise<void> {
+    if (!noteId || !versionId) {
+        throw new Error('Invalid noteId or versionId for replaceVersionContentWith.');
+    }
+
+    try {
+        // Overwrite the content file for the specified version
+        const { size } = await this.versionContentRepo.write(noteId, versionId, newContent);
+        const timestamp = new Date().toISOString();
+
+        // Update the manifest with the new size and last modified date
+        await this.manifestManager.updateNoteManifest(noteId, (manifest) => {
+            const branch = manifest.branches[manifest.currentBranch];
+            if (!branch) throw new Error(`Current branch not found for note ${noteId}`);
+
+            const versionData = branch.versions[versionId];
+            if (!versionData) {
+                throw new Error(`Version ${versionId} not found in manifest for note ${noteId}.`);
+            }
+
+            versionData.size = size;
+            manifest.lastModified = timestamp;
+        });
+
+        // Notify that data has changed
+        this.eventBus.trigger('version-saved', noteId);
+
+    } catch (error) {
+        console.error(`VC: Failed to replace content for version ${versionId} for note ${noteId}.`, error);
+        this.manifestManager.invalidateNoteManifestCache(noteId);
+        throw error;
+    }
+  }
+
   public async createDeviation(noteId: string, versionId: string, targetFolder: TFolder | null): Promise<TFile | null> {
     if (!noteId || !versionId) {
         throw new Error('Invalid parameters for creating deviation.');
