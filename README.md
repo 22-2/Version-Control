@@ -67,7 +67,7 @@ This plugin solves that. It allows you to save "snapshots" of your notes at any 
 
 *   💅 **Flexible Interface:** Choose between a detailed **Card View** that shows all actions at a glance, or a sleek, **Compact List View** for a more minimal look.
 
-### **Supports**
+### **Supports Version Control For:**
 
 * **Markdown files (notes)**
 * **Bases**
@@ -103,3 +103,10 @@ This structure ensures data persistence and privacy:
 
 * **Mobile**
 * **Desktop**
+
+### Download
+
+To jump straight to the Version Control plugin in Obsidian, try this:
+
+* **​Click the URI:** Copy and paste or click this [link](obsidian://show-plugin?id=version-control), which should launch the app: obsidian://show-plugin?id=version-control
+* **Alternatively (Search):** If the link doesn't work, go to your Obsidian Settings and search for 'Version-Control' in the Community Plugins list.
