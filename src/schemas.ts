@@ -41,6 +41,7 @@ export const VersionControlSettingsSchema = z.object({
     defaultExportFormat: z.enum(['md', 'json', 'ndjson', 'txt']).optional().default('md'),
     useRelativeTimestamps: z.boolean().optional().default(true),
     enableVersionNaming: z.boolean().optional().default(true),
+    enableVersionDescription: z.boolean().optional().default(false),
     isListView: z.boolean().optional().default(false),
     renderMarkdownInPreview: z.boolean().optional().default(true),
     enableWatchMode: z.boolean().optional().default(false),
@@ -53,6 +54,12 @@ export const VersionControlSettingsSchema = z.object({
     pathFilters: z.array(z.string()).optional().default([]),
     centralManifest: CentralManifestSchema.optional().default({ version: "1.0.0", notes: {} }),
     isGlobal: z.boolean().optional(),
+    enableWordCount: z.boolean().optional().default(false),
+    includeMdSyntaxInWordCount: z.boolean().optional().default(false),
+    enableCharacterCount: z.boolean().optional().default(false),
+    includeMdSyntaxInCharacterCount: z.boolean().optional().default(false),
+    enableLineCount: z.boolean().optional().default(false),
+    includeMdSyntaxInLineCount: z.boolean().optional().default(false),
 });
 
 const PartialNoteSettingsSchema = VersionControlSettingsSchema.omit({
@@ -72,7 +79,14 @@ export const BranchSchema = z.object({
         versionNumber: z.number().int(),
         timestamp: z.string().datetime(),
         name: z.string().optional(),
+        description: z.string().optional(),
         size: z.number(),
+        wordCount: z.number().optional(),
+        wordCountWithMd: z.number().optional(),
+        charCount: z.number().optional(),
+        charCountWithMd: z.number().optional(),
+        lineCount: z.number().optional(),
+        lineCountWithoutMd: z.number().optional(),
     })),
     totalVersions: z.number().int(),
     settings: PartialNoteSettingsSchema.optional(),
@@ -98,7 +112,14 @@ export const VersionHistoryEntrySchema = z.object({
     versionNumber: z.number(),
     timestamp: z.string().datetime(),
     name: z.string().optional(),
+    description: z.string().optional(),
     size: z.number(),
+    wordCount: z.number().optional(),
+    wordCountWithMd: z.number().optional(),
+    charCount: z.number().optional(),
+    charCountWithMd: z.number().optional(),
+    lineCount: z.number().optional(),
+    lineCountWithoutMd: z.number().optional(),
 });
 
 export const VersionDataSchema = VersionHistoryEntrySchema.extend({

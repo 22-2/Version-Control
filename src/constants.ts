@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: VersionControlSettings = VersionControlSettingsSc
   defaultExportFormat: 'md',
   useRelativeTimestamps: true,
   enableVersionNaming: true,
+  enableVersionDescription: false,
   isListView: false,
   renderMarkdownInPreview: true,
   enableWatchMode: false,
@@ -31,4 +32,10 @@ export const DEFAULT_SETTINGS: VersionControlSettings = VersionControlSettingsSc
     version: "1.0.0",
     notes: {},
   },
+  enableWordCount: false,
+  includeMdSyntaxInWordCount: false,
+  enableCharacterCount: false,
+  includeMdSyntaxInCharacterCount: false,
+  enableLineCount: false,
+  includeMdSyntaxInLineCount: false,
 });

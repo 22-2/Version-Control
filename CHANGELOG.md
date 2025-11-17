@@ -1,5 +1,23 @@
 ***
 
+**Version: 1.9.24**
+
+#### ✨ New Features
+
+*   **Version Statistics:** You can now see detailed statistics for each version of your note directly on the version card.
+    *   Enable Word, Character, and Line counts from the settings panel.
+    *   For each statistic, you can choose whether to include or exclude Markdown syntax in the calculation, giving you precise control over the data you see.
+    
+***
+
+**Version: 1.9.23**
+
+#### ✨ New Features
+
+*   **Descriptions** You can now add descriptions along side names for any version.
+
+***
+
 **Version: 1.9.22**
 
 #### 🎨 Improvements & UX

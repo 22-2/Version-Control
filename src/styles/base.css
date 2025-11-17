@@ -157,6 +157,13 @@
     transition: opacity 0.2s ease-in-out;
 }
 
+/* NEW: Style for indented sub-settings */
+.v-setting-item-sub-setting {
+    margin-left: var(--size-4-4);
+    padding-left: var(--size-4-4);
+    border-left: 2px solid var(--background-modifier-border);
+}
+
 /* Animations */
 @keyframes v-shimmer {
     100% {
@@ -183,7 +190,8 @@
  */
 
 /* For Firefox */
-body .version-control-view.version-control-view .v-history-list > div[data-virtuoso-scroller="true"],
+body .version-control-view.version-control-view .v-history-list div[data-virtuoso-scroller="true"],
+body .version-control-view.version-control-view .v-description-panel-list div[data-virtuoso-scroller="true"],
 body .version-control-view.version-control-view .v-settings-panel-content-wrapper,
 body .version-control-view.version-control-view .v-error-display .v-error-details,
 body .version-control-view.version-control-view .v-preview-panel-content,
@@ -199,7 +207,8 @@ body .version-control-view.version-control-view .v-version-content-preview .tabl
 }
 
 /* For WebKit browsers (Chrome, Safari, Electron) */
-body .version-control-view.version-control-view .v-history-list > div[data-virtuoso-scroller="true"]::-webkit-scrollbar,
+body .version-control-view.version-control-view .v-history-list div[data-virtuoso-scroller="true"]::-webkit-scrollbar,
+body .version-control-view.version-control-view .v-description-panel-list div[data-virtuoso-scroller="true"]::-webkit-scrollbar,
 body .version-control-view.version-control-view .v-settings-panel-content-wrapper::-webkit-scrollbar,
 body .version-control-view.version-control-view .v-error-display .v-error-details::-webkit-scrollbar,
 body .version-control-view.version-control-view .v-preview-panel-content::-webkit-scrollbar,
