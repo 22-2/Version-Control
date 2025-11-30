@@ -56,6 +56,13 @@ export const versionActions: VersionActionConfig[] = [
         actionHandler: (version, store) => store.dispatch(thunks.requestExportSingleVersion(version)),
     },
     {
+        id: 'copy-path',
+        title: 'Copy version file path',
+        icon: 'copy',
+        tooltip: 'Copy the stored version file path to the clipboard',
+        actionHandler: (version, store) => store.dispatch(thunks.copyVersionPath(version)),
+    },
+    {
         id: 'delete',
         title: 'Delete this version',
         icon: 'trash-2', 

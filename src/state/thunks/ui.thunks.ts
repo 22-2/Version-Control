@@ -1,4 +1,4 @@
-import { App, TFolder } from 'obsidian';
+import { App, FileSystemAdapter, TFolder } from 'obsidian';
 import type { Container } from 'inversify';
 import type { AppThunk, AppStore } from '../store';
 import { actions } from '../appSlice';
@@ -8,6 +8,7 @@ import { CHANGELOG_URL } from '../../constants';
 import { initializeView } from './core.thunks';
 import { UIService } from '../../services/ui-service';
 import { VersionManager } from '../../core/version-manager';
+import { PathService } from '../../core/storage/path-service';
 import { TYPES } from '../../types/inversify.types';
 import { isPluginUnloading } from './ThunkUtils';
 import { versionActions } from '../../ui/VersionActions';
@@ -255,6 +256,52 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
     }));
 };
 
+export const copyVersionPath = (version: VersionHistoryEntry): AppThunk => async (_dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const uiService = container.get<UIService>(TYPES.UIService);
+    const app = container.get<App>(TYPES.App);
+    const pathService = container.get<PathService>(TYPES.PathService);
+    const state = getState();
+
+    if (state.status !== AppStatus.READY || state.noteId !== version.noteId) {
+        uiService.showNotice("VC: Cannot copy the path right now.", 4000);
+        return;
+    }
+
+    let rawVersionPath: string | null = null;
+    try {
+        rawVersionPath = pathService.getNoteVersionPath(version.noteId, version.id);
+    } catch (error) {
+        console.error('Version Control: Failed to compute version path.', error);
+    }
+
+    if (!rawVersionPath) {
+        uiService.showNotice('VC: Version file path is unavailable for this entry.');
+        return;
+    }
+
+    const resolvedPath = resolvePathForClipboard(rawVersionPath, app);
+    if (!resolvedPath) {
+        uiService.showNotice('VC: Version file path is invalid.');
+        return;
+    }
+
+    try {
+        const copied = await copyTextToClipboard(resolvedPath.value);
+        if (copied) {
+            const message = resolvedPath.isFullPath
+                ? 'Version file path copied to clipboard.'
+                : 'Copied vault-relative version path (full path unavailable).';
+            uiService.showNotice(message, resolvedPath.isFullPath ? 2500 : 4000);
+        } else {
+            uiService.showNotice('VC: Failed to access the clipboard. Please copy manually.');
+        }
+    } catch (error) {
+        console.error('Version Control: Failed to copy version path.', error);
+        uiService.showNotice('VC: Failed to copy the version file path. Check the console for details.');
+    }
+};
+
 export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, container) => {
     if (isPluginUnloading(container)) return;
     const state = getState();
@@ -373,4 +420,123 @@ export const closeSettingsPanelWithNotice = (message: string, duration?: number)
     const uiService = container.get<UIService>(TYPES.UIService);
     dispatch(actions.closePanel());
     uiService.showNotice(message, duration);
+};
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    if (typeof text !== 'string' || text.length === 0) {
+        return false;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (error) {
+            console.warn('Version Control: navigator clipboard copy failed.', error);
+        }
+    }
+
+    try {
+        const electron = (typeof window !== 'undefined' && typeof (window as unknown as { require?: (module: string) => unknown }).require === 'function')
+            ? (window as unknown as { require: (module: string) => { clipboard?: { writeText?: (value: string) => void } } }).require('electron')
+            : null;
+        const clipboard = electron?.clipboard;
+        if (clipboard?.writeText) {
+            clipboard.writeText(text);
+            return true;
+        }
+    } catch (error) {
+        console.warn('Version Control: electron clipboard copy failed.', error);
+    }
+
+    if (typeof document !== 'undefined') {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            return successful;
+        } catch (error) {
+            console.warn('Version Control: fallback clipboard copy failed.', error);
+        }
+    }
+
+    return false;
+};
+
+interface ClipboardPathResolutionResult {
+    value: string;
+    isFullPath: boolean;
+}
+
+const resolvePathForClipboard = (pathValue: unknown, app: App | null | undefined): ClipboardPathResolutionResult | null => {
+    if (typeof pathValue !== 'string') {
+        return null;
+    }
+
+    const normalizedInput = pathValue.trim();
+    if (normalizedInput.length === 0) {
+        return null;
+    }
+
+    if (isAbsolutePath(normalizedInput)) {
+        return { value: normalizedInput, isFullPath: true };
+    }
+
+    try {
+        const adapter = app?.vault?.adapter;
+        if (adapter && adapter instanceof FileSystemAdapter && typeof adapter.getBasePath === 'function') {
+            const basePath = adapter.getBasePath();
+            if (typeof basePath === 'string' && basePath.length > 0) {
+                return {
+                    value: joinBaseAndRelativePath(basePath, normalizedInput),
+                    isFullPath: true,
+                };
+            }
+        }
+    } catch (error) {
+        console.warn('Version Control: Unable to resolve full path for clipboard copy.', error);
+    }
+
+    return { value: normalizedInput, isFullPath: false };
+};
+
+const isAbsolutePath = (value: string): boolean => {
+    if (value.startsWith('\\\\')) {
+        return true; // UNC path
+    }
+    if (/^[a-zA-Z]:[\\/]/.test(value)) {
+        return true; // Windows drive letter
+    }
+    return value.startsWith('/') || value.startsWith('\\');
+};
+
+const joinBaseAndRelativePath = (basePath: string, relativePath: string): string => {
+    const separator = basePath.includes('\\') && !basePath.includes('/') ? '\\' : '/';
+    const trimmedBase = basePath.replace(/[\\/]+$/, '');
+    const cleanedRelative = stripLeadingPathIndicators(relativePath)
+        .replace(/[\\/]+/g, separator);
+
+    if (cleanedRelative.length === 0) {
+        return trimmedBase;
+    }
+
+    return `${trimmedBase}${separator}${cleanedRelative}`;
+};
+
+const stripLeadingPathIndicators = (value: string): string => {
+    let result = value.trim();
+    while (result.startsWith('./') || result.startsWith('.\\')) {
+        result = result.slice(2);
+    }
+    while (result.startsWith('/') || result.startsWith('\\')) {
+        result = result.slice(1);
+    }
+    return result;
 };
