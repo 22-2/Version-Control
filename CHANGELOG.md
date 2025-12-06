@@ -1,5 +1,13 @@
 ***
 
+**Version: 1.9.30**
+
+#### 🐞 Bug Fixes
+
+* Fixed a bug where the plugin was not working because of a Dexie version conflict with another plugin. Make sure to restart obsidian after updating this plugin.
+
+***
+
 **Version: 1.9.29**
 
 #### ✨ New Features
