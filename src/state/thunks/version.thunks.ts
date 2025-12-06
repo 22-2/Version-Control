@@ -9,6 +9,7 @@ import { NoteManager } from '../../core/note-manager';
 import { UIService } from '../../services/ui-service';
 import { BackgroundTaskManager } from '../../core/tasks/BackgroundTaskManager';
 import { ManifestManager } from '../../core/manifest-manager';
+import { PluginEvents } from '../../core/plugin-events';
 import { TYPES } from '../../types/inversify.types';
 import { isPluginUnloading } from './ThunkUtils';
 import type VersionControlPlugin from '../../main';
@@ -169,10 +170,17 @@ export const updateVersionDetails = (versionId: string, details: { name: string;
 
     // Optimistically update the UI for the current version ID
     dispatch(actions.updateVersionDetailsInState({ versionId, ...updatePayload }));
+    
+    // Also update the timeline panel if it's open, so changes reflect immediately
+    dispatch(actions.updateTimelineEventInState({ versionId, ...updatePayload }));
 
     try {
         const newVersionId = await versionManager.updateVersionDetails(noteId, versionId, updatePayload);
         
+        // Trigger event to update IndexedDB timeline metadata
+        const eventBus = container.get<PluginEvents>(TYPES.EventBus);
+        eventBus.trigger('version-updated', noteId, versionId, updatePayload);
+
         // If the ID changed due to renaming, we must reload the history to reflect the new ID in the state
         if (newVersionId !== versionId) {
              if (!isPluginUnloading(container)) {

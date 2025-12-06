@@ -39,6 +39,6 @@ export const DEFAULT_SETTINGS: VersionControlSettings = VersionControlSettingsSc
   includeMdSyntaxInCharacterCount: false,
   enableLineCount: false,
   includeMdSyntaxInLineCount: false,
-  noteIdFormat: '{path}',
+  noteIdFormat: '{uuid}',
   versionIdFormat: '{timestamp}_{version}',
 });

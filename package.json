@@ -1,6 +1,6 @@
 {
   "name": "version-control",
-  "version": "1.9.27",
+  "version": "1.9.29",
   "description": "A local, snapshot-based version control system. Lets you create finite number of versions of any note.",
   "main": "main.js",
   "sideEffects": false,
@@ -42,7 +42,9 @@
     "react-hook-form": "^7.65.0",
     "@hookform/resolvers": "^5.2.2",
     "zustand": "^5.0.8",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "dexie": "^4.2.1",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@types/lodash-es": "^4.17.12",

@@ -218,12 +218,12 @@ const IdFormatSettings: React.FC = memo(() => {
         <form onSubmit={handleSubmit(onSubmit)} style={{ width: '100%' }}>
             <SettingComponent
                 name="Note ID Format"
-                desc="Format for generating Note IDs. Available variables: {path}, {name}, {timestamp}. Default: {path}"
+                desc="Format for generating Note IDs. Available variables: {path}, {uuid}, {timestamp}. Default: {uuid}"
             >
                 <ValidatedInput
                     name="noteIdFormat"
                     control={control}
-                    placeholder="{path}"
+                    placeholder="{uuid}"
                     maxLength={100}
                 />
             </SettingComponent>

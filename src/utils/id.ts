@@ -98,8 +98,13 @@ const VALIDATION = {
         CRYPTO_FORMAT_INVALID: "Version Control: Generated ID does not conform to UUID v4 format."
     },
     REGEX: {
+        // Strict validation regex with anchors
         UUID_V4: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-        POSITIVE_INTEGER: /^\d+$/
+        // Extraction regex without anchors
+        UUID_V4_EXTRACTION: /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i,
+        POSITIVE_INTEGER: /^\d+$/,
+        // Matches a 13-digit timestamp (milliseconds) or 10-digit (seconds), surrounded by common delimiters or string boundaries
+        TIMESTAMP: /(?:^|[_.\- ])([0-9]{13}|[0-9]{10})(?:[_.\- ]|$)/
     }
 } as const;
 
@@ -267,29 +272,60 @@ export function sanitizeId(id: string): string {
 }
 
 /**
+ * Extracts a UUID v4 from a given ID string if present.
+ * Useful for preserving UUIDs when regenerating IDs (e.g., during renames).
+ * 
+ * @param id - The ID string to search
+ * @returns The found UUID string or null if not found
+ */
+export function extractUuidFromId(id: string): string | null {
+    if (!id || typeof id !== 'string') return null;
+    
+    const match = id.match(VALIDATION.REGEX.UUID_V4_EXTRACTION);
+    return match ? match[0] : null;
+}
+
+/**
+ * Extracts a timestamp from a given ID string if present.
+ * Looks for 13-digit (ms) or 10-digit (sec) numbers surrounded by delimiters.
+ * 
+ * @param id - The ID string to search
+ * @returns The found timestamp string or null if not found
+ */
+export function extractTimestampFromId(id: string): string | null {
+    if (!id || typeof id !== 'string') return null;
+
+    const match = id.match(VALIDATION.REGEX.TIMESTAMP);
+    // match[1] contains the captured digits
+    return match ? match[1] : null;
+}
+
+/**
  * Generates a note ID based on the configured format and file properties.
  * 
  * @param settings - The plugin settings containing the noteIdFormat
  * @param file - The file for which to generate the ID
+ * @param customTimestamp - Optional timestamp to use instead of current time (useful for preserving timestamps during renames)
+ * @param customUuid - Optional UUID to use instead of generating a new one (useful for preserving UUIDs during renames)
  * @returns A sanitized note ID
  * 
  * @throws {TypeError} If settings or file parameters are invalid
  * 
  * @remarks
  * Supported format variables:
+ * - {uuid}: A cryptographically secure random UUID
  * - {path}: Full file path (with .md/.base extensions transformed at the end)
- * - {name}: File basename (without extension, not transformed)
- * - {timestamp}: Current timestamp in milliseconds
+ * - {timestamp}: Current timestamp in milliseconds (or customTimestamp if provided)
  * 
  * Note: File path extensions (.md/.base) are transformed to _md/_base at the end of the path
- * only when used for the {path} variable. The basename is not transformed.
+ * only when used for the {path} variable.
  * 
  * @example
  * ```typescript
  * generateNoteId(settings, file) // Returns 'folder_note_md_1640995200000'
  * ```
  */
-export function generateNoteId(settings: VersionControlSettings, file: TFile): string {
+export function generateNoteId(settings: VersionControlSettings, file: TFile, customTimestamp?: string | number, customUuid?: string | null): string {
     // Defensive parameter validation
     if (!isVersionControlSettings(settings)) {
         throw new TypeError(VALIDATION.ERRORS.SETTINGS_REQUIRED);
@@ -302,11 +338,10 @@ export function generateNoteId(settings: VersionControlSettings, file: TFile): s
     // Safe access with defaults
     const format = typeof settings.noteIdFormat === 'string' && settings.noteIdFormat.trim().length > 0
         ? settings.noteIdFormat
-        : '{path}';
+        : '{uuid}';
     
     // Validate file properties
     const filePath = validateAndSanitizeString(file.path, 'file.path');
-    const baseName = validateAndSanitizeString(file.basename, 'file.basename');
     
     // Apply extension transformation to the file path (only for the {path} variable)
     // This ensures .md and .base at the end of the path become _md and _base
@@ -314,15 +349,35 @@ export function generateNoteId(settings: VersionControlSettings, file: TFile): s
     
     // Generate timestamp only when needed for performance
     const hasTimestampVariable = format.includes('{timestamp}');
-    const timestamp = hasTimestampVariable ? Date.now().toString() : '';
+    let timestamp = '';
+    
+    if (hasTimestampVariable) {
+        if (customTimestamp !== undefined && customTimestamp !== null) {
+            timestamp = String(customTimestamp);
+        } else {
+            timestamp = Date.now().toString();
+        }
+    }
+
+    // Generate UUID only when needed
+    const hasUuidVariable = format.includes('{uuid}');
+    let uuid = '';
+
+    if (hasUuidVariable) {
+        if (customUuid) {
+            uuid = customUuid;
+        } else {
+            uuid = generateUniqueId();
+        }
+    }
     
     // Build ID using efficient string replacement
     let id = format;
     
     // Use index-based replacement for better performance than sequential replace
     const replacements: Array<[string, string]> = [
-        ['{path}', transformedPath], // Use transformed path
-        ['{name}', baseName],        // Basename is NOT transformed
+        ['{path}', transformedPath],
+        ['{uuid}', uuid],
         ['{timestamp}', timestamp]
     ];
     
