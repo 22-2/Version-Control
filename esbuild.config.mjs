@@ -4,9 +4,11 @@ import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { fileURLToPath } from "url";
 
 const execAsync = promisify(exec);
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Production mode by default, development only with explicit flag
 const isDevelopment = process.argv.includes("--development");
@@ -30,7 +32,7 @@ const zodAliasPlugin = {
   setup(build) {
     build.onResolve({ filter: /^zod\/v4\/core$/ }, () => {
       return { 
-        path: path.resolve(__dirname, 'node_modules', 'zod', 'v4', 'core', 'index.cjs') 
+        path: path.join(__dirname, 'node_modules', 'zod', 'v4', 'core', 'index.cjs') 
       };
     });
   },
