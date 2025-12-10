@@ -1,5 +1,28 @@
 ***
 
+**Version: 1.9.33**
+
+#### ✨ New Features
+
+* **Compression Feature:** Added an optional compression feature. When enabled, it ensures all version history files are compressed before being written to disk, which helps limit file size.
+* **Manual Decompression Note:** If you want to use the version file without the plugin, you can change the version file's `.md` extension to `.gz`, extract the file, rename the extracted file by adding the `.md` extension, and then open it.
+
+***
+
+**Version: 1.9.32**
+
+#### ✨ New Features
+
+* **Edit History (Per Branch):** Introducing passive, automatic snapshots of every change you make.
+    * There are now two types of history: **Version History** (for intentional, milestone saves) and **Edit History** (for granular, automatic changes).
+    * Edit History conserves resources by saving only highly compressed diffs (like Git) between changes, while Version History continues to save the full content.
+    * Currently, Edit History data is stored solely in IndexedDB (request a feature for disk storage).
+    * **Switching Views:** Simply click on the "Version History" header text (at the top left corner of the version control view in the right sidebar) to toggle between "Version History" and "Edit History."
+
+* **Early Stable Release:** This is an early stable release of the Edit History feature. While major problems are unlikely (i hope), minor inconsistencies are possible, please open an issue if you encounter any inconsistencies. Your feedback is highly valued!
+
+***
+
 **Version: 1.9.31**
 
 #### 🐞 Bug Fixes

@@ -2,11 +2,12 @@ import { moment } from 'obsidian';
 import clsx from 'clsx';
 import { type FC, type MouseEvent, type KeyboardEvent, useCallback, useEffect, useRef, memo, useMemo, useState, useLayoutEffect, type FocusEvent } from 'react';
 import { useAppDispatch, useAppSelector } from '../hooks/useRedux';
-import type { VersionHistoryEntry as VersionHistoryEntryType } from '../../types';
+import type { VersionHistoryEntry as VersionHistoryEntryType, ViewMode } from '../../types';
 import { formatFileSize } from '../utils/dom';
 import { thunks } from '../../state/thunks';
 import { actions } from '../../state/appSlice';
 import { versionActions } from '../VersionActions';
+import { editActions } from '../EditActions';
 import { Icon } from './Icon';
 import type { AppStore } from '../../state/store';
 import { useTime } from '../contexts/TimeContext';
@@ -16,15 +17,17 @@ interface HistoryEntryProps {
     version: VersionHistoryEntryType;
     searchQuery?: string;
     isSearchCaseSensitive?: boolean;
+    viewMode?: ViewMode;
 }
 
 const MAX_NAME_LENGTH = 256;
 const MAX_DESC_LENGTH = 2048;
 
-export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery, isSearchCaseSensitive }) => {
+export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery, isSearchCaseSensitive, viewMode = 'versions' }) => {
     const dispatch = useAppDispatch();
-    const { settings, namingVersionId, highlightedVersionId, isManualVersionEdit, isSearchActive } = useAppSelector(state => ({
-        settings: state.settings,
+    const { settings, enableCompression, namingVersionId, highlightedVersionId, isManualVersionEdit, isSearchActive } = useAppSelector(state => ({
+        settings: state.effectiveSettings,
+        enableCompression: state.settings.enableCompression,
         namingVersionId: state.namingVersionId,
         highlightedVersionId: state.highlightedVersionId,
         isManualVersionEdit: state.isManualVersionEdit,
@@ -117,7 +120,11 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
             const currentDesc = String(version.description ?? '');
 
             if (rawName !== currentName || rawDesc !== currentDesc) {
-                dispatch(thunks.updateVersionDetails(version.id, { name: rawName, description: rawDesc }));
+                if (viewMode === 'edits') {
+                    dispatch(thunks.updateEditDetails(version.id, { name: rawName, description: rawDesc }));
+                } else {
+                    dispatch(thunks.updateVersionDetails(version.id, { name: rawName, description: rawDesc }));
+                }
             } else {
                 dispatch(actions.stopVersionEditing());
             }
@@ -125,7 +132,7 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
             console.error('HistoryEntry.saveDetails error:', err);
             dispatch(actions.stopVersionEditing());
         }
-    }, [dispatch, version.id, version.name, version.description, nameValue, descValue]);
+    }, [dispatch, version.id, version.name, version.description, nameValue, descValue, viewMode]);
 
     useEffect(() => {
         if (!isNamingThisVersion) return;
@@ -208,7 +215,8 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
         return { timestampText: text, tooltipTimestamp: tooltip };
     }, [version.timestamp, settings?.useRelativeTimestamps, now]);
 
-    const safeActions = Array.isArray(versionActions) ? versionActions : [];
+    const actionsList = viewMode === 'edits' ? editActions : versionActions;
+    const safeActions = Array.isArray(actionsList) ? actionsList : [];
     const showNameEditor = isNamingThisVersion && (isManualVersionEdit || settings.enableVersionNaming);
     const showDescEditor = isNamingThisVersion && (isManualVersionEdit || settings.enableVersionDescription);
 
@@ -220,6 +228,17 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
     const shouldShowDescription = hasDescription && (isSearchActive || settings.showDescriptionInList);
     const showFooterDescription = shouldShowDescription && !settings.isListView;
     const showListDescription = shouldShowDescription && settings.isListView;
+
+    const prefix = viewMode === 'edits' ? 'E' : 'V';
+    const placeholderName = viewMode === 'edits' ? 'Edit name...' : 'Version name...';
+    const placeholderDesc = viewMode === 'edits' ? 'Edit description...' : 'Version description...';
+
+    const displaySize = useMemo(() => {
+        if (enableCompression) {
+            return version.compressedSize ?? version.uncompressedSize ?? version.size;
+        }
+        return version.uncompressedSize ?? version.size;
+    }, [enableCompression, version.compressedSize, version.uncompressedSize, version.size]);
 
     return (
         <div
@@ -242,7 +261,7 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
             <div className="v-entry-header">
                 <span className="v-version-id" aria-hidden>
                     <HighlightedText 
-                        text={`V${String(version.versionNumber ?? '')}`} 
+                        text={`${prefix}${String(version.versionNumber ?? '')}`} 
                         {...(searchQuery && { query: searchQuery })}
                         {...(isSearchCaseSensitive !== undefined && { caseSensitive: isSearchCaseSensitive })}
                     />
@@ -255,8 +274,8 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
                         className="v-version-name-input"
                         value={nameValue}
                         onChange={(e) => setNameValue(e.target.value)}
-                        placeholder="Version name..."
-                        aria-label="Version name input"
+                        placeholder={placeholderName}
+                        aria-label="Name input"
                         onKeyDown={handleNameInputKeyDown}
                         onClick={(e) => e.stopPropagation()}
                         maxLength={MAX_NAME_LENGTH}
@@ -289,7 +308,7 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
             <div className="v-version-content" aria-hidden>
                 <span>
                     Size: <HighlightedText 
-                        text={formatFileSize(typeof version.size === 'number' ? version.size : 0)} 
+                        text={formatFileSize(typeof displaySize === 'number' ? displaySize : 0)} 
                         {...(searchQuery && { query: searchQuery })}
                         {...(isSearchCaseSensitive !== undefined && { caseSensitive: isSearchCaseSensitive })}
                     />
@@ -327,8 +346,8 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
                 <div className="v-entry-description-editor">
                     <textarea
                         ref={descTextareaRef}
-                        placeholder="Version description..."
-                        aria-label="Version description input"
+                        placeholder={placeholderDesc}
+                        aria-label="Description input"
                         value={descValue}
                         onChange={(e) => setDescValue(e.target.value)}
                         onKeyDown={handleDescTextareaKeyDown}

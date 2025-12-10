@@ -1,9 +1,10 @@
-import { TFile, App, debounce } from 'obsidian';
+import { TFile, App } from 'obsidian';
 import type { AppThunk } from '../store';
 import { actions } from '../appSlice';
-import type { VersionControlSettings, VersionHistoryEntry, AppError } from '../../types';
+import type { VersionControlSettings, VersionHistoryEntry } from '../../types';
 import { AppStatus } from '../state';
-import { loadHistoryForNoteId, initializeView, loadHistory } from './core.thunks';
+import { loadHistoryForNoteId, initializeView, loadEffectiveSettingsForNote } from './core.thunks';
+import { loadEditHistory } from './edit-history.thunks';
 import { VersionManager } from '../../core/version-manager';
 import { NoteManager } from '../../core/note-manager';
 import { UIService } from '../../services/ui-service';
@@ -11,57 +12,16 @@ import { BackgroundTaskManager } from '../../core/tasks/BackgroundTaskManager';
 import { ManifestManager } from '../../core/manifest-manager';
 import { PluginEvents } from '../../core/plugin-events';
 import { TYPES } from '../../types/inversify.types';
-import { isPluginUnloading } from './ThunkUtils';
+import { resolveSettings, isPluginUnloading } from '../utils/settingsUtils';
 import type VersionControlPlugin from '../../main';
 
 /**
  * Thunks for direct version management (CRUD operations).
  */
 
-export const autoRegisterNote = (file: TFile): AppThunk => async (dispatch, getState, container) => {
+export const saveNewVersion = (options: { isAuto?: boolean; settings?: VersionControlSettings } = {}): AppThunk => async (dispatch, getState, container) => {
     if (isPluginUnloading(container)) return;
-    const versionManager = container.get<VersionManager>(TYPES.VersionManager);
-    const uiService = container.get<UIService>(TYPES.UIService);
-    const backgroundTaskManager = container.get<BackgroundTaskManager>(TYPES.BackgroundTaskManager);
-
-    // Set a loading state for the file
-    dispatch(actions.initializeView({ file, noteId: null, source: 'none' }));
-    
-    try {
-        const result = await versionManager.saveNewVersionForFile(file, {
-            name: 'Initial Version',
-            isAuto: true,
-            force: true, // Save even if empty
-            settings: getState().settings,
-        });
-
-        if (result.status === 'saved') {
-            uiService.showNotice(`"${file.basename}" is now under version control.`);
-            // After saving, we have a noteId and history, so we can load it directly.
-            dispatch(loadHistoryForNoteId(file, result.newNoteId));
-        } else {
-            // This could happen if another process registered it, or if content is identical to a deleted note's last version.
-            // In this case, just proceed with a normal history load.
-            dispatch(loadHistory(file));
-        }
-    } catch (error) {
-        console.error(`Version Control: Failed to auto-register note "${file.path}".`, error);
-        const appError: AppError = {
-            title: "Auto-registration failed",
-            message: `Could not automatically start version control for "${file.basename}".`,
-            details: error instanceof Error ? error.message : String(error),
-        };
-        dispatch(actions.reportError(appError));
-    } finally {
-        if (!isPluginUnloading(container)) {
-            backgroundTaskManager.syncWatchMode();
-        }
-    }
-};
-
-export const saveNewVersion = (options: { isAuto?: boolean } = {}): AppThunk => async (dispatch, getState, container) => {
-    if (isPluginUnloading(container)) return;
-    const { isAuto = false } = options;
+    const { isAuto = false, settings } = options;
     const uiService = container.get<UIService>(TYPES.UIService);
     const initialState = getState();
     if (initialState.isRenaming) {
@@ -96,7 +56,22 @@ export const saveNewVersion = (options: { isAuto?: boolean } = {}): AppThunk => 
             return;
         }
 
-        const result = await versionManager.saveNewVersionForFile(liveFile, { isAuto, settings: initialState.settings });
+        // Determine settings to use:
+        // 1. Explicit settings passed in options (e.g. from BackgroundTaskManager)
+        // 2. Fallback to effective settings from state (for manual saves)
+        let settingsToUse: VersionControlSettings;
+        
+        if (settings) {
+            settingsToUse = settings;
+        } else {
+            const effectiveHistorySettings = initialState.effectiveSettings;
+            settingsToUse = {
+                ...initialState.settings, // Global VersionControlSettings (contains ID formats)
+                ...effectiveHistorySettings // Flattened effective history settings (overrides logic flags)
+            };
+        }
+
+        const result = await versionManager.saveNewVersionForFile(liveFile, { isAuto, settings: settingsToUse });
 
         const stateAfterSave = getState();
         if (isPluginUnloading(container) || stateAfterSave.status !== AppStatus.READY || stateAfterSave.file?.path !== initialFileFromState.path) {
@@ -139,6 +114,45 @@ export const saveNewVersion = (options: { isAuto?: boolean } = {}): AppThunk => 
             if (finalState.status === AppStatus.READY) {
                 dispatch(actions.setProcessing(false));
             }
+        }
+    }
+};
+
+export const performAutoSave = (file: TFile): AppThunk => async (dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const state = getState();
+    if (state.isRenaming) {
+        return; // Silently ignore auto-saves during rename
+    }
+    const versionManager = container.get<VersionManager>(TYPES.VersionManager);
+    const manifestManager = container.get<ManifestManager>(TYPES.ManifestManager);
+    const noteManager = container.get<NoteManager>(TYPES.NoteManager);
+    const plugin = container.get<VersionControlPlugin>(TYPES.Plugin);
+    
+    const noteId = await noteManager.getNoteId(file) ?? await manifestManager.getNoteIdByPath(file.path);
+    if (!noteId) return;
+
+    // Resolve effective settings properly to respect local overrides
+    const historySettings = await resolveSettings(noteId, 'version', container);
+    const hybridSettings = {
+        ...plugin.settings,
+        ...historySettings
+    };
+
+    const result = await versionManager.saveNewVersionForFile(file, {
+        name: 'Auto-save', 
+        force: false, 
+        isAuto: true, 
+        settings: hybridSettings
+    });
+  
+    if (result.status === 'saved' && result.newVersionEntry) {
+        const currentState = getState();
+        if (currentState.status === AppStatus.READY && currentState.file?.path === file.path) {
+            if (currentState.noteId !== result.newNoteId) {
+                dispatch(actions.updateNoteIdInState({ noteId: result.newNoteId }));
+            }
+            dispatch(actions.addVersionSuccess({ newVersion: result.newVersionEntry }));
         }
     }
 };
@@ -210,6 +224,61 @@ export const requestEditVersion = (version: VersionHistoryEntry): AppThunk => (d
     dispatch(actions.startVersionEditing({ versionId: version.id }));
 };
 
+export const viewVersionInPanel = (version: VersionHistoryEntry): AppThunk => async (dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const state = getState();
+    const uiService = container.get<UIService>(TYPES.UIService);
+    
+    if (state.status !== AppStatus.READY || !state.noteId) {
+        uiService.showNotice("Cannot view version: context not ready.");
+        return;
+    }
+
+    const { noteId, viewMode } = state;
+    let content: string | null = null;
+
+    dispatch(actions.setProcessing(true));
+
+    try {
+        if (viewMode === 'versions') {
+            const versionManager = container.get<VersionManager>(TYPES.VersionManager);
+            content = await versionManager.getVersionContent(noteId, version.id);
+        } else {
+            // We need to dynamically import or use container to get EditHistoryManager to avoid circular imports if any
+            // But since we are in thunks, we can just use container.
+            // Note: EditHistoryManager type is needed.
+            const { EditHistoryManager } = require('../../core/edit-history-manager');
+            const editHistoryManager = container.get<typeof EditHistoryManager>(TYPES.EditHistoryManager);
+            content = await editHistoryManager.getEditContent(noteId, version.id);
+        }
+
+        if (content === null) {
+            throw new Error("Content not found.");
+        }
+
+        // Check if state is still valid for this note before opening panel
+        const currentState = getState();
+        if (currentState.noteId !== noteId) {
+             console.warn("VC: Note ID changed during preview load. Aborting panel open.");
+             return;
+        }
+
+        dispatch(actions.openPanel({
+            type: 'preview',
+            version,
+            content
+        }));
+
+    } catch (error) {
+        console.error("VC: Failed to view version content.", error);
+        uiService.showNotice("Failed to load content for preview.");
+    } finally {
+        if (!isPluginUnloading(container)) {
+            dispatch(actions.setProcessing(false));
+        }
+    }
+};
+
 export const requestRestore = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, container) => {
     if (isPluginUnloading(container)) return;
     const state = getState();
@@ -239,9 +308,8 @@ export const restoreVersion = (versionId: string): AppThunk => async (dispatch, 
     const versionManager = container.get<VersionManager>(TYPES.VersionManager);
     const noteManager = container.get<NoteManager>(TYPES.NoteManager);
     const backgroundTaskManager = container.get<BackgroundTaskManager>(TYPES.BackgroundTaskManager);
-    const manifestManager = container.get<ManifestManager>(TYPES.ManifestManager);
     const plugin = container.get<VersionControlPlugin>(TYPES.Plugin);
-    
+
     if (initialState.status !== AppStatus.READY) return;
 
     const initialFileFromState = initialState.file;
@@ -262,26 +330,18 @@ export const restoreVersion = (versionId: string): AppThunk => async (dispatch, 
             throw new Error(`Restore failed. Note's version control ID has changed or was removed. Expected "${initialNoteIdFromState}", found "${currentNoteIdOnDisk}".`);
         }
 
-        const globalSettings = plugin.settings;
-        let effectiveSettings: VersionControlSettings = { ...globalSettings };
-        try {
-            const noteManifest = await manifestManager.loadNoteManifest(initialNoteIdFromState);
-            const currentBranch = noteManifest?.branches[noteManifest.currentBranch];
-            const perBranchSettings = currentBranch?.settings;
-            const isUnderGlobalInfluence = perBranchSettings?.isGlobal === true || perBranchSettings === undefined;
-            if (!isUnderGlobalInfluence) {
-                const definedBranchSettings = Object.fromEntries(
-                    Object.entries(perBranchSettings ?? {}).filter(([, v]) => v !== undefined)
-                );
-                effectiveSettings = { ...globalSettings, ...definedBranchSettings };
-            }
-        } catch (e) { /* use global on error */ }
+        // Resolve effective settings properly to respect local overrides
+        const historySettings = await resolveSettings(initialNoteIdFromState, 'version', container);
+        const hybridSettings = {
+            ...plugin.settings,
+            ...historySettings
+        };
 
         await versionManager.saveNewVersionForFile(liveFile, { 
             name: `Backup before restoring V${versionId.substring(0,6)}...`, 
             force: true, 
             isAuto: false, 
-            settings: effectiveSettings 
+            settings: hybridSettings 
         });
 
         const stateAfterBackup = getState();
@@ -468,111 +528,6 @@ export const deleteAllVersions = (): AppThunk => async (dispatch, getState, cont
     }
 };
 
-export const performAutoSave = (file: TFile): AppThunk => async (dispatch, getState, container) => {
-    if (isPluginUnloading(container)) return;
-    const state = getState();
-    if (state.isRenaming) {
-        return; // Silently ignore auto-saves during rename
-    }
-    const versionManager = container.get<VersionManager>(TYPES.VersionManager);
-    const manifestManager = container.get<ManifestManager>(TYPES.ManifestManager);
-    const noteManager = container.get<NoteManager>(TYPES.NoteManager);
-    const plugin = container.get<VersionControlPlugin>(TYPES.Plugin);
-    
-    const noteId = await noteManager.getNoteId(file) ?? await manifestManager.getNoteIdByPath(file.path);
-    if (!noteId) return;
-
-    const globalSettings = plugin.settings;
-    let effectiveSettings: VersionControlSettings = { ...globalSettings };
-    try {
-        const noteManifest = await manifestManager.loadNoteManifest(noteId);
-        const currentBranch = noteManifest?.branches[noteManifest.currentBranch];
-        const perBranchSettings = currentBranch?.settings;
-        const isUnderGlobalInfluence = perBranchSettings?.isGlobal === true || perBranchSettings === undefined;
-        if (!isUnderGlobalInfluence) {
-            const definedBranchSettings = Object.fromEntries(
-                Object.entries(perBranchSettings ?? {}).filter(([, v]) => v !== undefined)
-            );
-            effectiveSettings = { ...globalSettings, ...definedBranchSettings };
-        }
-    } catch (e) { /* use global on error */ }
-
-    const result = await versionManager.saveNewVersionForFile(file, {
-        name: 'Auto-save', 
-        force: false, 
-        isAuto: true, 
-        settings: effectiveSettings
-    });
-  
-    if (result.status === 'saved' && result.newVersionEntry) {
-        const currentState = getState();
-        if (currentState.status === AppStatus.READY && currentState.file?.path === file.path) {
-            if (currentState.noteId !== result.newNoteId) {
-                dispatch(actions.updateNoteIdInState({ noteId: result.newNoteId }));
-            }
-            dispatch(actions.addVersionSuccess({ newVersion: result.newVersionEntry }));
-        }
-    }
-};
-
-export const handleVaultSave = (file: TFile): AppThunk => async (dispatch, _getState, container) => {
-    if (isPluginUnloading(container)) return;
-    const noteManager = container.get<NoteManager>(TYPES.NoteManager);
-    const manifestManager = container.get<ManifestManager>(TYPES.ManifestManager);
-    const plugin = container.get<VersionControlPlugin>(TYPES.Plugin);
-  
-    const noteId = await noteManager.getNoteId(file) ?? await manifestManager.getNoteIdByPath(file.path);
-    if (!noteId) return;
-  
-    const globalSettings = plugin.settings;
-    let effectiveSettings: VersionControlSettings = { ...globalSettings };
-    try {
-        const noteManifest = await manifestManager.loadNoteManifest(noteId);
-        if (noteManifest) {
-            const currentBranch = noteManifest.branches[noteManifest.currentBranch];
-            const perBranchSettings = currentBranch?.settings;
-            const isUnderGlobalInfluence = perBranchSettings?.isGlobal === true || perBranchSettings === undefined;
-            if (!isUnderGlobalInfluence) {
-                const definedBranchSettings = Object.fromEntries(
-                    Object.entries(perBranchSettings ?? {}).filter(([, v]) => v !== undefined)
-                );
-                effectiveSettings = { ...globalSettings, ...definedBranchSettings };
-            }
-        }
-    } catch (e) {
-        // Manifest might not exist yet. Use global settings.
-    }
-  
-    const debouncerInfo = plugin.autoSaveDebouncers.get(file.path);
-
-    if (!effectiveSettings.autoSaveOnSave) {
-        if (debouncerInfo) {
-            debouncerInfo.debouncer.cancel();
-            plugin.autoSaveDebouncers.delete(file.path);
-        }
-        return;
-    }
-    
-    const intervalMs = (effectiveSettings.autoSaveOnSaveInterval || 2) * 1000;
-
-    if (debouncerInfo && debouncerInfo.interval === intervalMs) {
-        debouncerInfo.debouncer(file);
-    } else {
-        debouncerInfo?.debouncer.cancel();
-
-        const newDebouncerFunc = debounce(
-            (f: TFile) => {
-                dispatch(performAutoSave(f));
-            },
-            intervalMs
-        );
-
-        plugin.autoSaveDebouncers.set(file.path, { debouncer: newDebouncerFunc, interval: intervalMs });
-        
-        newDebouncerFunc(file);
-    }
-};
-
 export const createBranch = (newBranchName: string): AppThunk => async (dispatch, getState, container) => {
     if (isPluginUnloading(container)) return;
     const state = getState();
@@ -597,19 +552,61 @@ export const switchBranch = (newBranchName: string): AppThunk => async (dispatch
     if (isPluginUnloading(container)) return;
     const state = getState();
     if (state.status !== AppStatus.READY || !state.noteId || !state.file) return;
-    const { noteId, file } = state;
+    const { noteId, file, viewMode } = state;
 
     const versionManager = container.get<VersionManager>(TYPES.VersionManager);
+    const manifestManager = container.get<ManifestManager>(TYPES.ManifestManager);
     const uiService = container.get<UIService>(TYPES.UIService);
 
+    // We do NOT set isProcessing here anymore. We rely on the LOADING status set by clearHistoryForBranchSwitch.
+    dispatch(actions.closePanel());
+
     try {
+        // 1. Perform the switch on disk
         await versionManager.switchBranch(noteId, newBranchName);
-        dispatch(actions.closePanel());
-        dispatch(loadHistoryForNoteId(file, noteId));
+        
+        // 2. Invalidate cache to force fresh read
+        manifestManager.invalidateNoteManifestCache(noteId);
+
+        // 3. Verify stabilization
+        // We read the manifest to ensure the file system has settled and returns the expected branch.
+        const manifest = await manifestManager.loadNoteManifest(noteId);
+        if (!manifest || manifest.currentBranch !== newBranchName) {
+            throw new Error(`Branch switch verification failed. Expected "${newBranchName}", got "${manifest?.currentBranch}".`);
+        }
+
+        // 4. Clear state & Set Loading
+        // This forces the UI to reset (show skeletons) and prevents stale state rendering.
+        const availableBranches = Object.keys(manifest.branches);
+        dispatch(actions.clearHistoryForBranchSwitch({
+            currentBranch: newBranchName,
+            availableBranches
+        }));
+
+        // 5. Load data for the new branch
+        // We await settings first to ensure they are ready for whatever history loading needs them.
+        await dispatch(loadEffectiveSettingsForNote(noteId));
+        
+        if (viewMode === 'edits') {
+            await dispatch(loadEditHistory(noteId));
+        } else {
+            await dispatch(loadHistoryForNoteId(file, noteId));
+        }
+        
+        // Sync watch mode (important if switching branches changes settings like auto-save)
+        const backgroundTaskManager = container.get<BackgroundTaskManager>(TYPES.BackgroundTaskManager);
+        backgroundTaskManager.syncWatchMode();
+
+        uiService.showNotice(`Switched to branch "${newBranchName}".`);
+
     } catch (error) {
         console.error("VC: Failed to switch branch.", error);
         uiService.showNotice(`Failed to switch branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        
+        // Attempt to reload current state to ensure consistency
+        dispatch(loadHistoryForNoteId(file, noteId));
     }
+    // No finally block needed to unset processing, as success actions in loadHistory/loadEditHistory set status to READY.
 };
 // --- version-manager.thunks.ts ファイルに追加 ---
 

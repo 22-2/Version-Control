@@ -11,6 +11,7 @@ import type { ManifestManager } from './core/manifest-manager';
 import type { DiffManager } from './services/diff-manager';
 import type { BackgroundTaskManager } from './core/tasks/BackgroundTaskManager';
 import type { TimelineManager } from './core/timeline-manager';
+import type { CompressionManager } from './core/compression-manager';
 import { configureServices } from './inversify.config';
 import { registerViews, addRibbonIcon, registerCommands } from './setup/UISetup';
 import { registerSystemEventListeners } from './setup/EventSetup';
@@ -97,10 +98,11 @@ export default class VersionControlPlugin extends Plugin {
             this.backgroundTaskManager = this.container.get<BackgroundTaskManager>(TYPES.BackgroundTaskManager);
             const timelineManager = this.container.get<TimelineManager>(TYPES.TimelineManager);
             const eventBus = this.container.get<PluginEvents>(TYPES.EventBus);
+            const compressionManager = this.container.get<CompressionManager>(TYPES.CompressionManager);
 
             // Validate critical services
             if (!this.store || !this.cleanupManager || !uiService || !manifestManager || 
-                !diffManager || !this.backgroundTaskManager || !timelineManager || !eventBus) {
+                !diffManager || !this.backgroundTaskManager || !timelineManager || !eventBus || !compressionManager) {
                 throw new Error("One or more critical services failed to initialize");
             }
 
@@ -109,6 +111,7 @@ export default class VersionControlPlugin extends Plugin {
 
             this.cleanupManager.initialize();
             timelineManager.initialize();
+            compressionManager.initialize();
             
             this.addChild(this.cleanupManager);
             this.addChild(uiService); 
@@ -179,6 +182,11 @@ export default class VersionControlPlugin extends Plugin {
             //  - Caches cleared via `component.register(() => cache.clear())`.
             //  - Intervals cleared in component `onunload` methods.
 
+            const compressionManager = this.container?.get<CompressionManager>(TYPES.CompressionManager);
+            if (compressionManager) {
+                compressionManager.terminate();
+            }
+
             // 4. Manually clean up the dependency injection container and its non-component services.
             await this.cleanupContainer();
 
@@ -190,8 +198,60 @@ export default class VersionControlPlugin extends Plugin {
 
     private async loadSettings() {
         try {
-            const loadedData: unknown = await this.loadData() || {};
+            const loadedData: any = await this.loadData() || {};
             let settingsData: Partial<VersionControlSettings>;
+
+            // --- Migration Logic: Flat to Nested Structure ---
+            // Detect legacy flat structure by checking for a known root key that moved (e.g., maxVersionsPerNote)
+            // and the absence of the new container (versionHistorySettings).
+            if ('maxVersionsPerNote' in loadedData && !('versionHistorySettings' in loadedData)) {
+                console.log("Version Control: Migrating settings from legacy flat format.");
+                try {
+                    const historyKeys = [
+                        'maxVersionsPerNote', 'autoCleanupOldVersions', 'autoCleanupDays',
+                        'useRelativeTimestamps', 'enableVersionNaming', 'enableVersionDescription',
+                        'showDescriptionInList', 'isListView', 'renderMarkdownInPreview',
+                        'enableWatchMode', 'watchModeInterval', 'autoSaveOnSave',
+                        'autoSaveOnSaveInterval', 'enableMinLinesChangedCheck', 'minLinesChanged',
+                        'enableWordCount', 'includeMdSyntaxInWordCount', 'enableCharacterCount',
+                        'includeMdSyntaxInCharacterCount', 'enableLineCount', 'includeMdSyntaxInLineCount',
+                        'isGlobal', 'autoRegisterNotes', 'pathFilters'
+                    ];
+
+                    const migratedVersionSettings: any = {};
+                    
+                    // Extract history settings from root
+                    for (const key of historyKeys) {
+                        if (key in loadedData) {
+                            migratedVersionSettings[key] = loadedData[key];
+                        }
+                    }
+
+                    // Construct new settings object structure
+                    // Note: We spread loadedData into root to preserve globals like databasePath,
+                    // but VersionControlSettingsSchema.parse will strip the now-invalid flat keys.
+                    const newSettings = {
+                        ...DEFAULT_SETTINGS,
+                        ...loadedData, 
+                        versionHistorySettings: {
+                            ...DEFAULT_SETTINGS.versionHistorySettings,
+                            ...migratedVersionSettings
+                        },
+                        // editHistorySettings will take defaults as it's a new feature
+                        editHistorySettings: {
+                            ...DEFAULT_SETTINGS.editHistorySettings
+                        }
+                    };
+
+                    // Validate and Save immediately
+                    this.settings = VersionControlSettingsSchema.parse(newSettings);
+                    await this.saveSettings();
+                    return; // Migration successful
+                } catch (migrationError) {
+                    console.error("Version Control: Settings migration failed. Falling back to default loading.", migrationError);
+                    // Fall through to standard loading logic if migration fails
+                }
+            }
     
             // Try parsing as the new full settings format first
             const settingsParseResult = VersionControlSettingsSchema.safeParse(loadedData);
@@ -202,7 +262,7 @@ export default class VersionControlPlugin extends Plugin {
                 const manifestParseResult = CentralManifestSchema.safeParse(loadedData);
                 if (manifestParseResult.success) {
                     // Old format: it's just a CentralManifest.
-                    console.log("Version Control: Migrating settings from old format.");
+                    console.log("Version Control: Migrating settings from old central manifest format.");
                     settingsData = { centralManifest: manifestParseResult.data };
                 } else {
                     // Unknown format, use defaults and log the error
@@ -212,7 +272,6 @@ export default class VersionControlPlugin extends Plugin {
             }
     
             // Merge defaults with loaded data, then parse to ensure the final object is valid.
-            // This handles migrations and adding new settings gracefully.
             const mergedSettings = {
                 ...DEFAULT_SETTINGS,
                 ...settingsData,
@@ -220,6 +279,14 @@ export default class VersionControlPlugin extends Plugin {
                     ...DEFAULT_SETTINGS.centralManifest,
                     ...(settingsData.centralManifest || {}),
                 },
+                versionHistorySettings: {
+                    ...DEFAULT_SETTINGS.versionHistorySettings,
+                    ...(settingsData.versionHistorySettings || {}),
+                },
+                editHistorySettings: {
+                    ...DEFAULT_SETTINGS.editHistorySettings,
+                    ...(settingsData.editHistorySettings || {}),
+                }
             };
     
             this.settings = VersionControlSettingsSchema.parse(mergedSettings);
