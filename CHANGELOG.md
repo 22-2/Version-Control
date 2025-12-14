@@ -1,5 +1,31 @@
 ***
 
+**Version: 1.9.35**
+
+#### ✨ New Features
+
+* **Dashboard Heatmap:** Introducing the new **Dashboard**! It features a heatmap that visualizes the number of versions/edits you've made per day. Access it by clicking the top-left corner button to open the dropdown menu and selecting **Dashboard**.
+* **Zip and Gzip Export:** Added support for **zip** and **gzip** formats when exporting versions and edits.
+
+#### 🎨 Improvements & UX
+
+* **Edit History Stability:** The edit history feature has been stabilized and is now as robust and reliable as the version history. (Previously, it was noted as being in an early stage.)
+
+#### ⚠️ Important Notice
+
+* **Potential Data Inconsistency Fix:** This release includes necessary changes for future stability, which might result in **SOME data loss** for a small number of users. We deeply apologize for this inconvenience. This is crucial for addressing and removing existing inconsistencies that could have led to more significant data loss in the future.
+* **Ignorable Errors:** You may safely **ignore all file rename errors** you encounter. These are non-critical, false positives caused by concurrent operations and do not affect the functionality or integrity of your data.
+
+***
+
+**Version: 1.9.34**
+
+#### 🎨 Improvements & UX
+
+* **General Stability:** Squashed many bugs for a more reliable experience.
+
+***
+
 **Version: 1.9.33**
 
 #### ✨ New Features

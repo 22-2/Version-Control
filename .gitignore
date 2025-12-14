@@ -18,3 +18,5 @@ styles.css
 # OS-specific
 .DS_Store
 Thumbs.db
+index.css
+index.js

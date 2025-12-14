@@ -1,23 +1,23 @@
 import { App, FileSystemAdapter, TFolder, TFile } from 'obsidian';
 import type { Container } from 'inversify';
-import type { AppThunk, AppStore } from '../store';
-import { actions } from '../appSlice';
-import type { VersionHistoryEntry, ViewMode } from '../../types';
-import { AppStatus, type ActionItem, type SortOrder, type SortProperty, type SortDirection } from '../state';
-import { CHANGELOG_URL } from '../../constants';
+import type { AppThunk, AppStore } from '@/state';
+import { appSlice } from '@/state';
+import type { VersionHistoryEntry, ViewMode } from '@/types';
+import { AppStatus, type ActionItem, type SortOrder, type SortProperty, type SortDirection } from '@/state';
+import { CHANGELOG_URL } from '@/constants';
 import { loadEffectiveSettingsForNote, loadHistoryForNoteId } from './core.thunks';
-import { UIService } from '../../services/ui-service';
-import { VersionManager } from '../../core/version-manager';
-import { EditHistoryManager } from '../../core/edit-history-manager';
-import { PathService } from '../../core/storage/path-service';
-import { TYPES } from '../../types/inversify.types';
-import { isPluginUnloading } from '../utils/settingsUtils';
-import { versionActions } from '../../ui/VersionActions';
-import { editActions } from '../../ui/EditActions';
-import type VersionControlPlugin from '../../main';
-import { requestWithRetry } from '../../utils/network';
-import { loadEditHistory } from './edit-history.thunks';
-import { createBranch, switchBranch } from './version.thunks';
+import { UIService } from '@/services';
+import { PathService,
+VersionManager } from '@/core';
+import { EditHistoryManager } from '@/core';
+import { TYPES } from '@/types/inversify.types';
+import { isPluginUnloading } from '@/state/utils/settingsUtils';
+import { versionActions } from '@/ui/VersionActions';
+import { editActions } from '@/ui/EditActions';
+import type VersionControlPlugin from '@/main';
+import { requestWithRetry } from '@/utils/network';
+import { loadEditHistory } from '@/state/thunks/edit-history';
+import { createBranch, switchBranch, requestDeleteBranch } from '@/state/thunks/version';
 
 /**
  * Thunks related to UI interactions, such as opening panels, tabs, and modals.
@@ -25,6 +25,101 @@ import { createBranch, switchBranch } from './version.thunks';
 
 let changelogCache: string | null = null;
 let isFetchingChangelog = false; // Flag to prevent concurrent fetches
+
+type ResolvedClipboardPath = { value: string; isFullPath: boolean };
+
+const isProbablyAbsolutePath = (value: string): boolean => {
+    if (!value) return false;
+
+    // file:// URLs are absolute by definition
+    if (/^file:\/\//i.test(value)) return true;
+
+    // Windows drive letter paths (C:\ or C:/)
+    if (/^[a-zA-Z]:[\\/]/.test(value)) return true;
+
+    // Windows UNC paths (\\server\share)
+    if (/^\\\\/.test(value)) return true;
+
+    // POSIX absolute paths
+    return value.startsWith('/');
+};
+
+/**
+ * Resolves a stored path for clipboard use.
+ * - If already absolute, returns it as-is.
+ * - If vault base path is available (desktop), resolves to an absolute path.
+ * - Otherwise returns the original value as vault-relative.
+ */
+const resolvePathForClipboard = (rawPath: string, app: App): ResolvedClipboardPath | null => {
+    const trimmed = (rawPath ?? '').trim();
+    if (!trimmed) return null;
+
+    if (isProbablyAbsolutePath(trimmed)) {
+        return { value: trimmed, isFullPath: true };
+    }
+
+    // On Obsidian desktop, the adapter is usually FileSystemAdapter and exposes getBasePath().
+    // On mobile, it may not, so we gracefully fall back to vault-relative paths.
+    try {
+        const adapter = app.vault.adapter;
+        if (adapter instanceof FileSystemAdapter) {
+            // Prefer the official API if available.
+            const getFullPath = (adapter as unknown as { getFullPath?: (p: string) => string }).getFullPath;
+            if (typeof getFullPath === 'function') {
+                const absolute = getFullPath.call(adapter, trimmed);
+                if (absolute) return { value: absolute, isFullPath: true };
+            }
+
+            const basePath = adapter.getBasePath?.();
+            if (basePath && typeof basePath === 'string') {
+                const sep = basePath.includes('\\') ? '\\' : '/';
+                const normalizedRelative = trimmed.replace(/[\\/]/g, sep);
+                const normalizedBase = basePath.endsWith('\\') || basePath.endsWith('/')
+                    ? basePath.slice(0, -1)
+                    : basePath;
+                return { value: `${normalizedBase}${sep}${normalizedRelative}`, isFullPath: true };
+            }
+        }
+    } catch (_error) {
+        // Fall through to relative return.
+    }
+
+    return { value: trimmed, isFullPath: false };
+};
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    const value = (text ?? '').toString();
+    if (!value) return false;
+
+    // Preferred modern API
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(value);
+            return true;
+        }
+    } catch (_error) {
+        // Fall back
+    }
+
+    // Fallback for environments where Clipboard API is blocked
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '0';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return ok;
+    } catch (_error) {
+        return false;
+    }
+};
 
 /**
  * Updates the plugin version in settings to the current manifest version.
@@ -60,10 +155,10 @@ export const toggleViewMode = (): AppThunk => async (dispatch, getState, contain
         ? plugin.settings.versionHistorySettings 
         : plugin.settings.editHistorySettings;
     
-    dispatch(actions.updateEffectiveSettings({ ...globalDefaults, isGlobal: true }));
+    dispatch(appSlice.actions.updateEffectiveSettings({ ...globalDefaults, isGlobal: true }));
 
     // 2. Update State (This clears panel, diffRequest, etc.)
-    dispatch(actions.setViewMode(newMode));
+    dispatch(appSlice.actions.setViewMode(newMode));
 
     // 3. Load Data for New Mode
     const { noteId, file } = state;
@@ -106,7 +201,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
 
     // For manual requests, forcefully close any existing panel to ensure the changelog is visible.
     if (isManualRequest && currentState.panel) {
-        dispatch(actions.closePanel());
+        dispatch(appSlice.actions.closePanel());
     }
     
     if (isFetchingChangelog) {
@@ -117,7 +212,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
     }
 
     if (!forceRefresh && changelogCache) {
-        dispatch(actions.openPanel({ type: 'changelog', content: changelogCache }));
+        dispatch(appSlice.actions.openPanel({ type: 'changelog', content: changelogCache }));
         // If showing from cache, it's a successful display, so update version.
         await updateVersionInSettings(container);
         return;
@@ -132,7 +227,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
     }
 
     isFetchingChangelog = true;
-    dispatch(actions.openPanel({ type: 'changelog', content: null })); // Show loading state
+    dispatch(appSlice.actions.openPanel({ type: 'changelog', content: null })); // Show loading state
     if (isManualRequest) {
         uiService.showNotice("Fetching latest changelog...", 2000);
     }
@@ -150,7 +245,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
         const canShowPanelNow = isManualRequest || stateAfterFetch.panel?.type === 'changelog';
 
         if (canShowPanelNow) {
-            dispatch(actions.openPanel({ type: 'changelog', content: changelogCache }));
+            dispatch(appSlice.actions.openPanel({ type: 'changelog', content: changelogCache }));
             // The version is updated ONLY after we have successfully committed to showing the panel.
             // This is the key to preventing the "version updated but panel not shown" bug.
             await updateVersionInSettings(container);
@@ -177,7 +272,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
         
         // If the loading panel is still open, close it on failure.
         if (getState().panel?.type === 'changelog') {
-            dispatch(actions.closePanel());
+            dispatch(appSlice.actions.closePanel());
         }
     } finally {
         if (!isPluginUnloading(container)) {
@@ -225,7 +320,7 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
         const versionManager = container.get<VersionManager>(TYPES.VersionManager);
         const editHistoryManager = container.get<EditHistoryManager>(TYPES.EditHistoryManager);
         
-        dispatch(actions.closePanel()); // Close the folder selection panel immediately.
+        dispatch(appSlice.actions.closePanel()); // Close the folder selection panel immediately.
 
         const latestState = getState();
         if (latestState.status !== AppStatus.READY || latestState.noteId !== version.noteId) {
@@ -256,7 +351,7 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
         }
     };
 
-    dispatch(actions.openPanel({
+    dispatch(appSlice.actions.openPanel({
         type: 'action',
         title: 'Create new note in...',
         items,
@@ -340,7 +435,7 @@ export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk =
         }
     };
 
-    dispatch(actions.openPanel({
+    dispatch(appSlice.actions.openPanel({
         type: 'action',
         title: `Actions for ${titlePrefix}${version.versionNumber}`,
         items,
@@ -378,11 +473,11 @@ export const showSortMenu = (): AppThunk => (dispatch, getState, container) => {
     });
 
     const onChooseAction = (sortOrder: SortOrder): AppThunk => (dispatch) => {
-        dispatch(actions.setSortOrder(sortOrder));
-        dispatch(actions.closePanel());
+        dispatch(appSlice.actions.setSortOrder(sortOrder));
+        dispatch(appSlice.actions.closePanel());
     };
 
-    dispatch(actions.openPanel({
+    dispatch(appSlice.actions.openPanel({
         type: 'action',
         title: 'Sort by',
         items,
@@ -412,12 +507,29 @@ export const showBranchSwitcher = (): AppThunk => (dispatch, getState) => {
         dispatch(createBranch(newBranchName));
     };
 
-    dispatch(actions.openPanel({
+    const contextActions = (item: ActionItem<string>): ActionItem<string>[] => {
+        // Prevent context menu on the special "Create new" item
+        if (item.id === '__create__') return [];
+        
+        return [
+            { id: 'delete', data: 'delete', text: 'Delete Branch', icon: 'trash' }
+        ];
+    };
+
+    const onContextAction = (actionId: string, branchName: string): AppThunk => (dispatch) => {
+        if (actionId === 'delete') {
+            dispatch(requestDeleteBranch(branchName));
+        }
+    };
+
+    dispatch(appSlice.actions.openPanel({
         type: 'action',
         title: 'Switch or create branch',
         items,
         onChooseAction,
         onCreateAction,
+        contextActions,
+        onContextAction,
         showFilter: true,
     }));
 };
@@ -431,125 +543,14 @@ export const showNotice = (message: string, duration?: number): AppThunk => (_di
 export const closeSettingsPanelWithNotice = (message: string, duration?: number): AppThunk => (dispatch, _getState, container) => {
     if (isPluginUnloading(container)) return;
     const uiService = container.get<UIService>(TYPES.UIService);
-    dispatch(actions.closePanel());
+    dispatch(appSlice.actions.closePanel());
     uiService.showNotice(message, duration);
 };
 
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-    if (typeof text !== 'string' || text.length === 0) {
-        return false;
-    }
+export const openDashboard = (): AppThunk => (dispatch, getState, container) => {
+    if (isPluginUnloading(container)) return;
+    const state = getState();
+    if (state.status !== AppStatus.READY) return;
 
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        try {
-            await navigator.clipboard.writeText(text);
-            return true;
-        } catch (error) {
-            console.warn('Version Control: navigator clipboard copy failed.', error);
-        }
-    }
-
-    try {
-        const electron = (typeof window !== 'undefined' && typeof (window as unknown as { require?: (module: string) => unknown }).require === 'function')
-            ? (window as unknown as { require: (module: string) => { clipboard?: { writeText?: (value: string) => void } } }).require('electron')
-            : null;
-        const clipboard = electron?.clipboard;
-        if (clipboard?.writeText) {
-            clipboard.writeText(text);
-            return true;
-        }
-    } catch (error) {
-        console.warn('Version Control: electron clipboard copy failed.', error);
-    }
-
-    if (typeof document !== 'undefined') {
-        try {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            textarea.style.pointerEvents = 'none';
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-            const successful = document.execCommand('copy');
-            document.body.removeChild(textarea);
-            return successful;
-        } catch (error) {
-            console.warn('Version Control: fallback clipboard copy failed.', error);
-        }
-    }
-
-    return false;
-};
-
-interface ClipboardPathResolutionResult {
-    value: string;
-    isFullPath: boolean;
-}
-
-const resolvePathForClipboard = (pathValue: unknown, app: App | null | undefined): ClipboardPathResolutionResult | null => {
-    if (typeof pathValue !== 'string') {
-        return null;
-    }
-
-    const normalizedInput = pathValue.trim();
-    if (normalizedInput.length === 0) {
-        return null;
-    }
-
-    if (isAbsolutePath(normalizedInput)) {
-        return { value: normalizedInput, isFullPath: true };
-    }
-
-    try {
-        const adapter = app?.vault?.adapter;
-        if (adapter && adapter instanceof FileSystemAdapter && typeof adapter.getBasePath === 'function') {
-            const basePath = adapter.getBasePath();
-            if (typeof basePath === 'string' && basePath.length > 0) {
-                return {
-                    value: joinBaseAndRelativePath(basePath, normalizedInput),
-                    isFullPath: true,
-                };
-            }
-        }
-    } catch (error) {
-        console.warn('Version Control: Unable to resolve full path for clipboard copy.', error);
-    }
-
-    return { value: normalizedInput, isFullPath: false };
-};
-
-const isAbsolutePath = (value: string): boolean => {
-    if (value.startsWith('\\\\')) {
-        return true; // UNC path
-    }
-    if (/^[a-zA-Z]:[\\/]/.test(value)) {
-        return true; // Windows drive letter
-    }
-    return value.startsWith('/') || value.startsWith('\\');
-};
-
-const joinBaseAndRelativePath = (basePath: string, relativePath: string): string => {
-    const separator = basePath.includes('\\') && !basePath.includes('/') ? '\\' : '/';
-    const trimmedBase = basePath.replace(/[\\/]+$/, '');
-    const cleanedRelative = stripLeadingPathIndicators(relativePath)
-        .replace(/[\\/]+/g, separator);
-
-    if (cleanedRelative.length === 0) {
-        return trimmedBase;
-    }
-
-    return `${trimmedBase}${separator}${cleanedRelative}`;
-};
-
-const stripLeadingPathIndicators = (value: string): string => {
-    let result = value.trim();
-    while (result.startsWith('./') || result.startsWith('.\\')) {
-        result = result.slice(2);
-    }
-    while (result.startsWith('/') || result.startsWith('\\')) {
-        result = result.slice(1);
-    }
-    return result;
+    dispatch(appSlice.actions.openPanel({ type: 'dashboard' }));
 };
