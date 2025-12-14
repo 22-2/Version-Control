@@ -144,9 +144,10 @@ async function createBuildOptions() {
   const editHistoryWorkerCode = await buildWorkerCode('src/workers/edit-history/index.ts');
   const compressionWorkerCode = await buildWorkerCode('src/workers/compression.worker.ts');
 
-  const entryPoints = ["src/main/index.ts"];
+  // Use object form to specify output names directly
+  const entryPoints = { main: "src/main/index.ts" };
   if (fileExists("src/styles.css")) {
-    entryPoints.push("src/styles.css");
+    entryPoints.styles = "src/styles.css";
   }
 
   const buildOptions = {
