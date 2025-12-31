@@ -1,25 +1,10 @@
-<<<<<<< HEAD
 import { App, FileSystemAdapter, TFolder, TFile } from 'obsidian';
-import type { Container } from 'inversify';
-import type { AppThunk, AppStore } from '@/state';
-=======
-import { TFolder, TFile } from 'obsidian';
 import type { AppThunk, Services } from '@/state';
->>>>>>> upstream/main
 import { appSlice } from '@/state';
 import type { VersionHistoryEntry, ViewMode } from '@/types';
 import { AppStatus, type ActionItem, type SortOrder, type SortProperty, type SortDirection } from '@/state';
 import { loadEffectiveSettingsForNote, loadHistoryForNoteId } from './core.thunks';
-<<<<<<< HEAD
-import { UIService } from '@/services';
-import { PathService,
-VersionManager } from '@/core';
-import { EditHistoryManager } from '@/core';
-import { TYPES } from '@/types/inversify.types';
-import { isPluginUnloading } from '@/state/utils/settingsUtils';
-=======
 import { shouldAbort } from '@/state/utils/guards';
->>>>>>> upstream/main
 import { versionActions } from '@/ui/VersionActions';
 import { editActions } from '@/ui/EditActions';
 import { loadEditHistory } from '@/state/thunks/edit-history';
@@ -28,10 +13,6 @@ import { createBranch, switchBranch, requestDeleteBranch } from '@/state/thunks/
 /**
  * Thunks related to UI interactions, such as opening panels, tabs, and modals.
  */
-
-<<<<<<< HEAD
-let changelogCache: string | null = null;
-let isFetchingChangelog = false; // Flag to prevent concurrent fetches
 
 type ResolvedClipboardPath = { value: string; isFullPath: boolean };
 
@@ -132,12 +113,9 @@ const copyTextToClipboard = async (text: string): Promise<boolean> => {
  * Updates the plugin version in settings to the current manifest version.
  * This is called after a changelog is successfully displayed to prevent it
  * from showing again on the next startup.
- * @param container The Inversify container.
+ * @param services The services registry.
  */
-const updateVersionInSettings = async (container: Container): Promise<void> => {
-=======
 const updateVersionInSettings = async (services: Services): Promise<void> => {
->>>>>>> upstream/main
     try {
         const plugin = services.plugin;
         const currentPluginVersion = plugin.manifest.version;
@@ -320,13 +298,12 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
     }));
 };
 
-<<<<<<< HEAD
-export const copyVersionPath = (version: VersionHistoryEntry): AppThunk => async (_dispatch, getState, container) => {
-    if (isPluginUnloading(container)) return;
-    const uiService = container.get<UIService>(TYPES.UIService);
-    const app = container.get<App>(TYPES.App);
-    const pathService = container.get<PathService>(TYPES.PathService);
-    const state = getState();
+export const copyVersionPath = (version: VersionHistoryEntry): AppThunk => async (_dispatch, getState, services) => {
+    if (shouldAbort(services, getState)) return;
+    const uiService = services.uiService;
+    const app = services.app;
+    const pathService = services.pathService;
+    const state = getState().app;
 
     if (state.status !== AppStatus.READY || state.noteId !== version.noteId) {
         uiService.showNotice("VC: Cannot copy the path right now.", 4000);
@@ -367,14 +344,9 @@ export const copyVersionPath = (version: VersionHistoryEntry): AppThunk => async
     }
 };
 
-export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, container) => {
-    if (isPluginUnloading(container)) return;
-    const state = getState();
-=======
 export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, services) => {
     if (shouldAbort(services, getState)) return;
     const state = getState().app;
->>>>>>> upstream/main
 
     if (state.status !== AppStatus.READY || state.noteId !== version.noteId) {
         return;
