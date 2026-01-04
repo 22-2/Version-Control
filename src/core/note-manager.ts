@@ -5,17 +5,23 @@ import { generateNoteId, extractUuidFromId, extractTimestampFromId } from "@/uti
 import type VersionControlPlugin from "@/main";
 import { EditHistoryManager } from "@/core";
 import { updateFrontmatter, getFrontmatterKey, DELETE } from "@/utils/frontmatter";
+import { PluginEvents } from "@/core/plugin-events";
 
 export class NoteManager {
     // A temporary exclusion list to prevent event handlers from processing files
     // that are in the middle of a special creation process (e.g., deviations).
     private pendingDeviations = new Set<string>();
 
+    // A temporary exclusion list for files undergoing internal frontmatter updates.
+    // This prevents infinite loops where the plugin's own writes trigger 'modify' events.
+    private internalWriteIgnoreSet = new Set<string>();
+
     constructor(
         private plugin: VersionControlPlugin,
         private app: App, 
         private manifestManager: ManifestManager,
-        private editHistoryManager: EditHistoryManager
+        private editHistoryManager: EditHistoryManager,
+        private eventBus: PluginEvents
     ) {}
 
     private get noteIdKey(): string {
@@ -90,9 +96,22 @@ export class NoteManager {
 
         // 1. Priority: Check Central Manifest for existing ID associated with this path.
         // This includes consolidation logic to ensure only one ID exists per path.
-        const canonicalId = await this.manifestManager.getConsolidatedNoteIdForPath(file.path);
+        const { winnerId, loserIds } = await this.manifestManager.resolveDuplicatesForPath(file.path);
 
-        if (canonicalId) {
+        // Handle cleanup of losers (Edit History & Timeline)
+        if (loserIds.length > 0) {
+            console.log(`VC: Cleaning up external data for duplicate IDs: ${loserIds.join(', ')}`);
+            for (const loserId of loserIds) {
+                // Delete Edit History (IDB)
+                await this.editHistoryManager.deleteNoteHistory(loserId).catch(e => 
+                    console.error(`VC: Failed to delete edit history for duplicate ${loserId}`, e)
+                );
+                // Clear Timeline
+                this.eventBus.trigger('history-deleted', loserId);
+            }
+        }
+
+        if (winnerId) {
             // If we found a canonical ID for this path, we enforce it.
             if (file.extension === 'md') {
                 const fileCache = this.app.metadataCache.getFileCache(file);
@@ -105,11 +124,11 @@ export class NoteManager {
                 
                 // If frontmatter ID doesn't match canonical ID OR legacy keys exist, update/clean.
                 // This handles cases where file content might have been overwritten, is stale, or contains deprecated keys.
-                if (currentFmId !== canonicalId || hasLegacyKeys) {
-                    await this.writeNoteIdToFrontmatter(file, canonicalId);
+                if (currentFmId !== winnerId || hasLegacyKeys) {
+                    await this.writeNoteIdToFrontmatter(file, winnerId);
                 }
             }
-            return canonicalId;
+            return winnerId;
         }
 
         // 2. Fallback: If no canonical ID in manifest, check frontmatter/generation logic.
@@ -180,6 +199,9 @@ export class NoteManager {
             const currentVal = await getFrontmatterKey(this.app, file, oldKey);
             
             if (currentVal.success && currentVal.data === value) {
+                // Register internal write to prevent event loop
+                this.registerInternalWrite(file.path);
+                
                 const result = await updateFrontmatter(this.app, file, {
                     [oldKey]: DELETE,
                     [newKey]: value
@@ -229,6 +251,9 @@ export class NoteManager {
 
     async writeNoteIdToFrontmatter(file: TFile, noteId: string): Promise<boolean> {
         try {
+            // Register internal write to prevent event loop
+            this.registerInternalWrite(file.path);
+
             const updates: Record<string, any> = {
                 [this.noteIdKey]: noteId
             };
@@ -376,5 +401,23 @@ export class NoteManager {
 
     public isPendingDeviation(path: string): boolean {
         return this.pendingDeviations.has(path);
+    }
+
+    // --- Internal Write Exclusion Methods ---
+
+    /**
+     * Registers a file path as having a pending internal write.
+     * Events triggered for this path within the timeout window will be ignored.
+     */
+    public registerInternalWrite(path: string): void {
+        this.internalWriteIgnoreSet.add(path);
+        // Auto-expire to prevent permanent blocking if event doesn't fire
+        setTimeout(() => {
+            this.internalWriteIgnoreSet.delete(path);
+        }, 1500);
+    }
+
+    public isInternalWrite(path: string): boolean {
+        return this.internalWriteIgnoreSet.has(path);
     }
 }

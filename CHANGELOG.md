@@ -1,5 +1,26 @@
 ***
 
+**Version: 1.9.41**
+
+#### 🎨 Improvements & UX
+
+* **General Stability:** Implemented stability improvements for a more reliable experience.
+
+***
+
+**Version: 1.9.40**
+
+#### ✨ New Features
+
+* **Permanent Data Cleanup:** Triggering the "clean-up orphaned version data" command now permanently deletes all version control data associated with notes that have already been deleted.
+* **Automatic Data Removal:** Deleting any note while the plugin is active will now result in the permanent deletion of all stored version control data for that specific note.
+
+#### 🎨 Improvements & UX
+
+* **General Stability:** Implemented stability improvements for a more reliable experience.
+
+***
+
 **Version: 1.9.39**
 
 #### ✨ New Features

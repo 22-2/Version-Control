@@ -11,6 +11,7 @@ import type { CleanupResult } from './types';
 import { ORPHAN_CLEANUP_QUEUE_KEY, QUEUE_PREFIX, CLEANUP_INTERVAL_MS } from './config';
 import { DebouncerManager } from './scheduling';
 import { PolicyCleanupOperation, OrphanCleanupOperation } from './operations';
+import type { NoteManager } from '@/core';
 
 /**
  * Manages all cleanup operations, such as removing old versions based on
@@ -43,7 +44,8 @@ export class CleanupManager extends Component {
     private readonly versionContentRepo: VersionContentRepository,
     private readonly plugin: VersionControlPlugin,
     private readonly storageService: StorageService,
-    private readonly store: AppStore
+    private readonly store: AppStore,
+    private readonly noteManager: NoteManager
   ) {
     super();
     this.debouncerManager = new DebouncerManager();
@@ -57,8 +59,12 @@ export class CleanupManager extends Component {
     this.orphanCleanupOp = new OrphanCleanupOperation(
       this.app,
       this.manifestManager,
+      this.editHistoryManager,
       this.pathService,
-      this.storageService
+      this.storageService,
+      this.eventBus,
+      this.plugin,
+      this.noteManager
     );
   }
 
@@ -96,6 +102,7 @@ export class CleanupManager extends Component {
     if (!this.plugin) throw new Error('Plugin instance is required');
     if (!this.storageService) throw new Error('StorageService is required');
     if (!this.store) throw new Error('Store is required');
+    if (!this.noteManager) throw new Error('NoteManager is required');
   }
 
   private getQueueKey(noteId: string): string {
@@ -235,19 +242,28 @@ export class CleanupManager extends Component {
   public cleanupOrphanedVersions(): Promise<CleanupResult> {
     return this.queueService.enqueue(ORPHAN_CLEANUP_QUEUE_KEY, async () => {
       if (this.isDestroyed) {
-        return { deletedNoteDirs: 0, deletedVersionFiles: 0, success: false };
+        return { 
+          deletedNoteDirs: 0, 
+          deletedVersionFiles: 0, 
+          deletedDuplicates: 0,
+          deletedOrphans: 0,
+          recoveredNotes: 0,
+          success: false 
+        };
       }
 
       const result: CleanupResult = {
         deletedNoteDirs: 0,
         deletedVersionFiles: 0,
+        deletedDuplicates: 0,
+        deletedOrphans: 0,
+        recoveredNotes: 0,
         success: true,
         errors: []
       };
 
       try {
-        await this.orphanCleanupOp.cleanupOrphanedNoteHistories(result, () => this.isDestroyed);
-        await this.orphanCleanupOp.cleanupOrphanedVersionFiles(result, () => this.isDestroyed);
+        await this.orphanCleanupOp.performDeepCleanup(result, () => this.isDestroyed);
       } catch (e) {
         result.success = false;
         const error = e instanceof Error ? e.message : String(e);

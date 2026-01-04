@@ -4,11 +4,12 @@ import type { TFile } from 'obsidian';
 import type { UIService } from '@/services';
 
 /**
- * Validation utilities for version thunks.
+ * Validation utilities for thunks.
+ * Shared across version and edit history operations.
  */
 
 /**
- * Validates that the app is in a ready state for version operations.
+ * Validates that the app is in a ready state for operations.
  *
  * @param state - The current app state.
  * @param uiService - UI service for notifications.
