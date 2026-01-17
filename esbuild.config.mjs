@@ -144,8 +144,7 @@ async function createBuildOptions() {
   const editHistoryWorkerCode = await buildWorkerCode('src/workers/edit-history/index.ts');
   const compressionWorkerCode = await buildWorkerCode('src/workers/compression.worker.ts');
 
-  // Use object form to specify output names directly
-  const entryPoints = { main: "src/main/index.ts" };
+  const entryPoints = ["src/main.ts"];
   if (fileExists("src/styles.css")) {
     entryPoints.styles = "src/styles.css";
   }
@@ -164,7 +163,7 @@ async function createBuildOptions() {
     minifyWhitespace: !isDevelopment,
     minifyIdentifiers: !isDevelopment,
     minifySyntax: !isDevelopment,
-    outdir: ".",
+    outdir: "assets",
     // JSX configuration for React 17+ automatic runtime
     jsx: "automatic",
     loader: {
