@@ -1,8 +1,10 @@
-import { Plugin, WorkspaceLeaf, FileView, TFile } from 'obsidian';
+import { Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import type { AppStore } from '@/state';
 import { thunks } from '@/state';
-import { VIEW_TYPE_VERSION_CONTROL } from '@/constants';
+import { VIEW_TYPE_VERSION_CONTROL, VIEW_TYPE_VERSION_CONTROL_NOTES } from '@/constants';
 import { VersionControlView } from '@/ui/version-control-view';
+import { VersionControlNotesView } from '@/ui/version-control-notes-view';
+import { activateTrackedNotesView, activateVersionControlView } from '@/ui/view-activation';
 
 /**
  * Registers the custom Version Control view using stable API.
@@ -12,6 +14,11 @@ export function registerViews(plugin: Plugin, store: AppStore): void {
         VIEW_TYPE_VERSION_CONTROL,
         (leaf: WorkspaceLeaf) => new VersionControlView(leaf, store)
     );
+
+    plugin.registerView(
+        VIEW_TYPE_VERSION_CONTROL_NOTES,
+        (leaf: WorkspaceLeaf) => new VersionControlNotesView(leaf, plugin, store)
+    );
 }
 
 /**
@@ -19,7 +26,23 @@ export function registerViews(plugin: Plugin, store: AppStore): void {
  */
 export function addRibbonIcon(plugin: Plugin, store: AppStore): void {
     plugin.addRibbonIcon('history', 'Open version control', (_evt: MouseEvent) => {
-        activateViewAndDispatch(plugin, store);
+        void activateVersionControlView(plugin, store).catch((error) => {
+            console.error('Version Control: Failed to open version control view', error);
+            store.dispatch(thunks.showNotice(
+                'Error: Could not open version control view. Please try again.',
+                5000
+            ));
+        });
+    });
+
+    plugin.addRibbonIcon('files', 'Open version controlled notes', (_evt: MouseEvent) => {
+        void activateTrackedNotesView(plugin).catch((error) => {
+            console.error('Version Control: Failed to open version controlled notes view', error);
+            store.dispatch(thunks.showNotice(
+                'Error: Could not open version controlled notes view. Please try again.',
+                5000
+            ));
+        });
     });
 }
 
@@ -30,7 +53,44 @@ export function registerCommands(plugin: Plugin, store: AppStore): void {
     plugin.addCommand({
         id: 'open-version-control-view',
         name: 'Open version control view',
-        callback: () => activateViewAndDispatch(plugin, store),
+        callback: () => {
+            void activateVersionControlView(plugin, store).catch((error) => {
+                console.error('Version Control: Failed to open version control view', error);
+                store.dispatch(thunks.showNotice(
+                    'Error: Could not open version control view. Please try again.',
+                    5000
+                ));
+            });
+        },
+    });
+
+    plugin.addCommand({
+        id: 'open-version-control-notes-view',
+        name: 'Open version controlled notes view',
+        callback: () => {
+            void activateTrackedNotesView(plugin).catch((error) => {
+                console.error('Version Control: Failed to open version controlled notes view', error);
+                store.dispatch(thunks.showNotice(
+                    'Error: Could not open version controlled notes view. Please try again.',
+                    5000
+                ));
+            });
+        },
+    });
+
+    plugin.addCommand({
+        id: 'open-current-note-in-version-control-view',
+        name: 'Open current note in version control view',
+        checkCallback: (checking: boolean): boolean => {
+            const activeFile = plugin.app.workspace.getActiveFile();
+            if (isValidNoteFile(activeFile)) {
+                if (!checking) {
+                    void activateVersionControlForFile(plugin, store, activeFile);
+                }
+                return true;
+            }
+            return false;
+        }
     });
 
     plugin.addCommand({
@@ -77,90 +137,18 @@ function isValidNoteFile(file: TFile | null): file is TFile {
     return Boolean(file && (file.extension === 'md' || file.extension === 'base'));
 }
 
-
-/**
- * Activates Version Control view following 2026 best practices:
- * - Context-aware leaf targeting (main/popout windows)
- * - Lazy loading support via revealLeaf/setViewState
- * - Performance optimization with onLayoutReady
- * - Enhanced error boundaries and typing
- */
-async function activateViewAndDispatch(
-    plugin: Plugin, 
-    store: AppStore
+async function activateVersionControlForFile(
+    plugin: Plugin,
+    store: AppStore,
+    file: TFile
 ): Promise<void> {
-    // Determine context leaf from most recent FileView (modern pattern)
-    const contextLeaf = getContextLeaf(plugin.app.workspace);
-    
-    // Defer initialization until layout is fully ready to prevent race conditions
-    plugin.app.workspace.onLayoutReady(() => {
-        store.dispatch(thunks.initializeView(contextLeaf || undefined));
-    });
-
-    // Target correct window/document (essential for popouts)
-    const targetDocument = getTargetDocument(plugin.app.workspace);
-    const existingLeaves = plugin.app.workspace.getLeavesOfType(VIEW_TYPE_VERSION_CONTROL);
-    const leafInTargetWindow = existingLeaves.find(
-        leaf => leaf.view?.containerEl?.ownerDocument === targetDocument
-    );
-
-    if (leafInTargetWindow) {
-        await plugin.app.workspace.revealLeaf(leafInTargetWindow);
-        return;
-    }
-
-    // Create new leaf following platform-aware patterns
-    const newLeaf = await createTargetLeaf(plugin.app.workspace, targetDocument);
-    if (newLeaf) {
-        await newLeaf.setViewState({ 
-            type: VIEW_TYPE_VERSION_CONTROL, 
-            active: true 
-        });
-        plugin.app.workspace.revealLeaf(newLeaf);
-    } else {
-        console.error('Version Control: Failed to create leaf');
+    try {
+        await activateVersionControlView(plugin, store, { file });
+    } catch (error) {
+        console.error('Version Control: Failed to open note in version control view', error);
         store.dispatch(thunks.showNotice(
-            'Error: Could not open version control view. Please try again.', 
+            `Error: Could not open version control for "${file.basename}".`,
             5000
         ));
     }
-}
-
-/**
- * Gets context leaf from most recent FileView (stable API).
- */
-function getContextLeaf(workspace: any): WorkspaceLeaf | null {
-    const recentLeaf = workspace.getMostRecentLeaf();
-    if (recentLeaf?.view instanceof FileView) {
-        return recentLeaf;
-    }
-    
-    const activeView = workspace.getActiveViewOfType(FileView);
-    return activeView?.leaf ?? null;
-}
-
-/**
- * Determines target document for multi-window support.
- */
-function getTargetDocument(workspace: any): Document {
-    const activeLeaf = workspace.getLeaf(false);
-    return activeLeaf?.view?.containerEl?.ownerDocument ?? document;
-}
-
-/**
- * Creates leaf using modern sidebar/popout-aware patterns.
- */
-async function createTargetLeaf(workspace: any, targetDocument: Document): Promise<WorkspaceLeaf | null> {
-    if (targetDocument === document) {
-        // Main window: prefer right sidebar
-        const rightLeaf = workspace.getRightLeaf(false);
-        if (rightLeaf) return rightLeaf;
-    } else {
-        // Popout: vertical split mimics sidebar behavior
-        const splitLeaf = workspace.getLeaf('split', 'vertical');
-        if (splitLeaf) return splitLeaf;
-    }
-    
-    // Universal fallback: new tab
-    return workspace.getLeaf(true);
 }

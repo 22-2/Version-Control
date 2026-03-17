@@ -3,6 +3,7 @@ import type { VersionControlSettings } from "@/types";
 import { VersionControlSettingsSchema, HistorySettingsSchema } from "@/schemas";
 
 export const VIEW_TYPE_VERSION_CONTROL = "version-control-view";
+export const VIEW_TYPE_VERSION_CONTROL_NOTES = "version-control-notes-view";
 export const DEFAULT_DB_PATH = ".versiondb";
 export const CHANGELOG_URL = "https://raw.githubusercontent.com/Yuichi-Aragi/Version-Control/main/CHANGELOG.md";
 export const DEFAULT_BRANCH_NAME = "main";
