@@ -1,3 +1,5 @@
+/* Keep third-party component styles in the dedicated CSS bundle output. */
+@import url("@uiw/react-heat-map/dist/heat-map.css");
 @import url("./styles/base.css");
 @import url("./styles/components.css");
 @import url("./styles/actionbar.css");

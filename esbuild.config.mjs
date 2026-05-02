@@ -144,14 +144,9 @@ async function createBuildOptions() {
   const editHistoryWorkerCode = await buildWorkerCode('src/workers/edit-history/index.ts');
   const compressionWorkerCode = await buildWorkerCode('src/workers/compression.worker.ts');
 
-  const entryPoints = ["src/main.ts"];
-  if (fileExists("src/styles.css")) {
-    entryPoints.styles = "src/styles.css";
-  }
-
   const buildOptions = {
     banner: { js: banner },
-    entryPoints,
+    entryPoints: ["src/main.ts"],
     bundle: true,
     platform: "browser", // Browser by default
     format: "cjs",
@@ -163,12 +158,15 @@ async function createBuildOptions() {
     minifyWhitespace: !isDevelopment,
     minifyIdentifiers: !isDevelopment,
     minifySyntax: !isDevelopment,
-    outdir: "assets",
+    outdir: "dist",
     // JSX configuration for React 17+ automatic runtime
     jsx: "automatic",
     loader: {
       '.tsx': 'tsx',
       '.ts': 'ts',
+      // CSS is built in a dedicated pass to guarantee `dist/styles.css`
+      // and avoid an extra auto-generated `dist/main.css` from JS imports.
+      '.css': 'empty',
     },
     // Support for TypeScript decorators
     tsconfigRaw: {
@@ -214,7 +212,7 @@ async function createBuildOptions() {
 // Function to run tsc --noEmit and log errors without halting build
 async function typeCheck() {
   try {
-    const { stdout, stderr } = await execAsync("npx tsc --noEmit --skipLibCheck true");
+    const { stdout, stderr } = await execAsync("pnpm exec tsc --noEmit --skipLibCheck true");
     
     if (stdout.trim() || stderr.trim()) {
       console.error("TypeScript type errors detected:");
@@ -239,6 +237,12 @@ async function typeCheck() {
 // Main build execution
 async function runBuild() {
   console.log(`Building in ${isDevelopment ? "development" : "production"} mode...`);
+
+  // We intentionally keep CSS output as `dist/styles.css`; remove any legacy artifact.
+  const legacyMainCssPath = path.join("dist", "main.css");
+  if (fileExists(legacyMainCssPath)) {
+    fs.unlinkSync(legacyMainCssPath);
+  }
   
   // Run type check first and WAIT for it to complete before starting build
   await typeCheck();
@@ -249,6 +253,21 @@ async function runBuild() {
   try {
     console.log("Starting esbuild...");
     await esbuild.build(options);
+
+    // Build CSS separately so the output filename is stable: `dist/styles.css`.
+    if (fileExists("src/styles.css")) {
+      await esbuild.build({
+        entryPoints: ["src/styles.css"],
+        bundle: true,
+        minify: !isDevelopment,
+        outdir: "dist",
+        outbase: "src",
+        platform: "browser",
+        format: "esm",
+        logLevel: "info",
+      });
+    }
+
     console.log("✓ Build completed successfully");
   } catch (error) {
     console.error("Build process failed:", error);
