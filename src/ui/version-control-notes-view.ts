@@ -1,4 +1,4 @@
-import { ItemView, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, Plugin, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { VIEW_TYPE_VERSION_CONTROL_NOTES } from '@/constants';
 import type { AppStore } from '@/state';
 import type { NoteEntry } from '@/types';
@@ -54,23 +54,24 @@ export class VersionControlNotesView extends ItemView {
         const countEl = titleGroup.createDiv({ cls: 'v-notes-view-count', text: 'Loading...' });
 
         const refreshButton = header.createEl('button', {
-            cls: 'clickable-icon v-notes-view-refresh',
-            text: 'Refresh',
+            cls: 'clickable-icon',
+            attr: { 'aria-label': 'Refresh notes' },
         });
         refreshButton.type = 'button';
+        setIcon(refreshButton, 'refresh-cw');
         refreshButton.addEventListener('click', () => void this.render());
 
         const listEl = wrapper.createDiv({ cls: 'v-notes-list' });
 
         try {
             const items = await this.loadTrackedNotes();
-            countEl.setText(`${items.length} notes`);
+            countEl.setText(`${items.length} ${items.length === 1 ? 'note' : 'notes'}`);
 
             if (items.length === 0) {
-                listEl.createDiv({
-                    cls: 'v-notes-empty-state',
-                    text: 'No notes are currently under version control.',
-                });
+                const emptyState = listEl.createDiv({ cls: 'v-empty-state' });
+                emptyState.createDiv({ cls: 'v-empty-state-icon', text: '📝' });
+                emptyState.createEl('h3', { text: 'No tracked notes' });
+                emptyState.createEl('p', { text: 'Start tracking notes from the Version Control panel.' });
                 return;
             }
 
@@ -80,10 +81,10 @@ export class VersionControlNotesView extends ItemView {
         } catch (error) {
             console.error('Version Control: Failed to render tracked notes view', error);
             countEl.setText('Unavailable');
-            listEl.createDiv({
-                cls: 'v-notes-empty-state is-error',
-                text: 'Could not load version controlled notes. Check the console for details.',
-            });
+            const errorState = listEl.createDiv({ cls: 'v-empty-state v-error-display' });
+            errorState.createDiv({ cls: 'v-empty-state-icon', text: '⚠️' });
+            errorState.createEl('h3', { text: 'Failed to load notes' });
+            errorState.createEl('p', { text: 'Could not load version controlled notes. Check the console for details.' });
         }
     }
 
@@ -127,22 +128,39 @@ export class VersionControlNotesView extends ItemView {
             noteEl.addClass('is-missing');
         }
 
-        const mainButton = noteEl.createEl('button', { cls: 'v-notes-item-button' });
-        mainButton.type = 'button';
-        mainButton.disabled = !item.file;
-
-        const basename = item.file?.basename || this.basenameFromPath(item.entry.notePath);
-        mainButton.createDiv({ cls: 'v-notes-item-title', text: basename });
-        mainButton.createDiv({ cls: 'v-notes-item-path', text: item.entry.notePath });
-
-        if (!item.file) {
-            mainButton.createDiv({
-                cls: 'v-notes-item-meta',
-                text: 'File not found in vault',
-            });
+        // Use div instead of button for card-like interaction (v-history-entry style)
+        if (item.file) {
+            noteEl.style.cursor = 'pointer';
         }
 
-        mainButton.addEventListener('click', () => {
+        const basename = item.file?.basename || this.basenameFromPath(item.entry.notePath);
+        
+        const titleEl = noteEl.createDiv({ cls: 'v-notes-item-title' });
+        titleEl.createEl('span', { text: basename });
+        
+        // Add status badge for missing files
+        if (!item.file) {
+            const badgeEl = titleEl.createEl('span', { 
+                cls: 'v-notes-item-badge',
+                text: 'Missing'
+            });
+            badgeEl.style.marginLeft = '8px';
+            badgeEl.style.fontSize = 'var(--font-ui-smaller)';
+            badgeEl.style.opacity = '0.7';
+        }
+
+        noteEl.createDiv({ cls: 'v-notes-item-path', text: item.entry.notePath });
+
+        const metaEl = noteEl.createDiv({ cls: 'v-notes-item-meta' });
+        const lastModified = item.entry.lastModified || item.entry.createdAt;
+        if (lastModified) {
+            const date = new Date(lastModified);
+            metaEl.setText(`Modified: ${date.toLocaleDateString()}`);
+        } else {
+            metaEl.setText('No version history');
+        }
+
+        noteEl.addEventListener('click', () => {
             if (!item.file) {
                 return;
             }

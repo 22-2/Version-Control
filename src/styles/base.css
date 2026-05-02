@@ -4,6 +4,12 @@
     display: none;
 }
 
+/* Global animations */
+@keyframes v-entry-appear {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* Global class for react-virtuoso containers to ensure they fill their parent */
 .v-virtuoso-container {
     height: 100%;
@@ -76,53 +82,36 @@
 }
 
 .v-notes-item {
-    border: 1px solid var(--background-modifier-border);
+    display: flex;
+    flex-direction: column;
+    padding: var(--size-4-2);
     border-radius: var(--radius-m);
-    overflow: hidden;
-    transition: all 0.15s ease;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    box-sizing: border-box;
+    transition: box-shadow 180ms ease-out, border-color 180ms ease-out, background-color 180ms ease-out;
+    animation: v-entry-appear 0.2s ease-out forwards;
 }
 
-.v-notes-item:hover {
-    border-color: var(--interactive-accent-hover);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+@media (hover: hover) and (pointer: fine) {
+    .v-notes-item:hover {
+        border-color: var(--interactive-accent);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+    }
+}
+
+.v-notes-item:active {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
 .v-notes-item.is-active {
     border-color: var(--interactive-accent);
-    background-color: var(--background-modifier-accent);
+    box-shadow: 0 0 0 1.5px var(--interactive-accent);
 }
 
 .v-notes-item.is-missing {
     opacity: 0.6;
-}
-
-.v-notes-item-button {
-    background: var(--background-primary-alt);
-    border: 0;
-    color: inherit;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: var(--size-4-3);
-    text-align: left;
-    width: 100%;
-    transition: background-color 0.15s ease;
-}
-
-.v-notes-item-button:hover:not(:disabled) {
-    background: var(--background-modifier-hover);
-}
-
-.v-notes-item-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.v-notes-item-content {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
 }
 
 .v-notes-item-title {
@@ -132,6 +121,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    margin-bottom: var(--size-4-2);
 }
 
 .v-notes-item-path,
