@@ -19,6 +19,16 @@ type VersionMenuTrigger =
     | { mouseEvent: MouseEvent }
     | { position: { x: number; y: number } };
 
+type VersionActionId = (typeof versionActions)[number]['id'];
+type VersionActionGroup = readonly VersionActionId[];
+
+const VERSION_ACTION_GROUPS: readonly VersionActionGroup[] = [
+    ['copy-path', 'deviation', 'export-single'],
+    ['diff', 'edit'],
+    ['restore'],
+    ['delete', 'replace'],
+];
+
 const isProbablyAbsolutePath = (value: string): boolean => {
     if (!value) return false;
 
@@ -120,6 +130,7 @@ const showVersionActionMenu = (
 ): void => {
     const actionsList = viewMode === 'edits' ? editActions : versionActions;
     const menu = new Menu();
+    const actionMap = new Map(actionsList.map(action => [action.id, action]));
 
     // Keep secondary actions in Obsidian's menu so card mode stays visually compact.
     menu.addItem(item => {
@@ -131,21 +142,32 @@ const showVersionActionMenu = (
             });
     });
 
-    menu.addSeparator();
+    // Group related commands so long action lists stay scannable in Obsidian's native menu.
+    for (const group of VERSION_ACTION_GROUPS) {
+        const groupActions = group
+            .map(actionId => actionMap.get(actionId))
+            .filter(action => action !== undefined);
 
-    for (const action of actionsList) {
-        menu.addItem(item => {
-            item
-                .setTitle(action.title)
-                .setIcon(action.icon)
-                .onClick(() => {
-                    action.actionHandler(version, services.store);
-                });
+        if (groupActions.length === 0) {
+            continue;
+        }
 
-            if (action.isDanger) {
-                item.setWarning(true);
-            }
-        });
+        menu.addSeparator();
+
+        for (const action of groupActions) {
+            menu.addItem(item => {
+                item
+                    .setTitle(action.title)
+                    .setIcon(action.icon)
+                    .onClick(() => {
+                        action.actionHandler(version, services.store);
+                    });
+
+                if (action.isDanger) {
+                    item.setWarning(true);
+                }
+            });
+        }
     }
 
     if ('mouseEvent' in trigger) {
