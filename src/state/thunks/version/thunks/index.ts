@@ -8,6 +8,7 @@ export * from './save-version.thunk';
 export * from './auto-save.thunk';
 export * from './update-version.thunk';
 export * from './restore-version.thunk';
+export * from './replace-version-content.thunk';
 export * from './delete-version.thunk';
 export * from './version-ui.thunk';
 export * from './branch.thunk';
