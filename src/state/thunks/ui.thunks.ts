@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, TFolder, TFile } from 'obsidian';
+import { App, FileSystemAdapter, Menu, TFolder, TFile } from 'obsidian';
 import type { AppThunk, Services } from '@/state';
 import { appSlice } from '@/state';
 import type { VersionHistoryEntry, ViewMode } from '@/types';
@@ -7,7 +7,7 @@ import { loadEffectiveSettingsForNote } from './core.thunks';
 import { shouldAbort } from '@/state/utils/guards';
 import { versionActions } from '@/ui/VersionActions';
 import { editActions } from '@/ui/EditActions';
-import { createBranch, switchBranch, requestDeleteBranch } from '@/state/thunks/version';
+import { createBranch, switchBranch, requestDeleteBranch, viewVersionInPanel } from '@/state/thunks/version';
 import { historyApi } from '@/state/apis/history.api';
 
 /**
@@ -15,6 +15,9 @@ import { historyApi } from '@/state/apis/history.api';
  */
 
 type ResolvedClipboardPath = { value: string; isFullPath: boolean };
+type VersionMenuTrigger =
+    | { mouseEvent: MouseEvent }
+    | { position: { x: number; y: number } };
 
 const isProbablyAbsolutePath = (value: string): boolean => {
     if (!value) return false;
@@ -107,6 +110,50 @@ const copyTextToClipboard = async (text: string): Promise<boolean> => {
     } catch (_error) {
         return false;
     }
+};
+
+const showVersionActionMenu = (
+    version: VersionHistoryEntry,
+    viewMode: ViewMode,
+    services: Services,
+    trigger: VersionMenuTrigger
+): void => {
+    const actionsList = viewMode === 'edits' ? editActions : versionActions;
+    const menu = new Menu();
+
+    // Keep secondary actions in Obsidian's menu so card mode stays visually compact.
+    menu.addItem(item => {
+        item
+            .setTitle('Preview in panel')
+            .setIcon('eye')
+            .onClick(() => {
+                services.store.dispatch(viewVersionInPanel(version));
+            });
+    });
+
+    menu.addSeparator();
+
+    for (const action of actionsList) {
+        menu.addItem(item => {
+            item
+                .setTitle(action.title)
+                .setIcon(action.icon)
+                .onClick(() => {
+                    action.actionHandler(version, services.store);
+                });
+
+            if (action.isDanger) {
+                item.setWarning(true);
+            }
+        });
+    }
+
+    if ('mouseEvent' in trigger) {
+        menu.showAtMouseEvent(trigger.mouseEvent);
+        return;
+    }
+
+    menu.showAtPosition(trigger.position);
 };
 
 /**
@@ -356,7 +403,10 @@ export const copyVersionPath = (version: VersionHistoryEntry): AppThunk => async
     }
 };
 
-export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, services) => {
+export const showVersionContextMenu = (
+    version: VersionHistoryEntry,
+    trigger: VersionMenuTrigger
+): AppThunk => (_dispatch, getState, services) => {
     if (shouldAbort(services, getState)) return;
     const state = getState().app;
 
@@ -364,33 +414,7 @@ export const showVersionContextMenu = (version: VersionHistoryEntry): AppThunk =
         return;
     }
 
-    const isEdits = state.viewMode === 'edits';
-    const actionsList = isEdits ? editActions : versionActions;
-    const titlePrefix = isEdits ? 'Edit #' : 'V';
-
-    const items: ActionItem<string>[] = actionsList.map(action => ({
-        id: action.id,
-        data: action.id,
-        text: action.title,
-        subtext: action.tooltip,
-        icon: action.icon,
-    }));
-
-    const onChooseAction = (actionId: string): AppThunk => (_dispatch, _getState, services) => {
-        const action = actionsList.find(a => a.id === actionId);
-        if (action) {
-            const store = services.store;
-            action.actionHandler(version, store);
-        }
-    };
-
-    dispatch(appSlice.actions.openPanel({
-        type: 'action',
-        title: `Actions for ${titlePrefix}${version.versionNumber}`,
-        items,
-        onChooseAction,
-        showFilter: false,
-    }));
+    showVersionActionMenu(version, state.viewMode, services, trigger);
 };
 
 export const showSortMenu = (): AppThunk => (dispatch, getState, services) => {

@@ -75,33 +75,25 @@
     overflow-y: auto;
 }
 
-.v-notes-empty-state {
-    background: var(--background-secondary);
-    border: 1px dashed var(--background-modifier-border);
-    border-radius: var(--radius-m);
-    color: var(--text-muted);
-    padding: var(--size-4-4);
-    text-align: center;
-}
-
-.v-notes-empty-state.is-error {
-    border-color: var(--text-error);
-    color: var(--text-error);
-}
-
 .v-notes-item {
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-m);
     overflow: hidden;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
+    transition: all 0.15s ease;
+}
+
+.v-notes-item:hover {
+    border-color: var(--interactive-accent-hover);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .v-notes-item.is-active {
     border-color: var(--interactive-accent);
+    background-color: var(--background-modifier-accent);
 }
 
 .v-notes-item.is-missing {
-    opacity: 0.7;
+    opacity: 0.6;
 }
 
 .v-notes-item-button {
@@ -111,10 +103,11 @@
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     padding: var(--size-4-3);
     text-align: left;
     width: 100%;
+    transition: background-color 0.15s ease;
 }
 
 .v-notes-item-button:hover:not(:disabled) {
@@ -123,12 +116,22 @@
 
 .v-notes-item-button:disabled {
     cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.v-notes-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .v-notes-item-title {
     font-size: var(--font-ui-medium);
     font-weight: var(--font-medium);
     overflow-wrap: anywhere;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .v-notes-item-path,

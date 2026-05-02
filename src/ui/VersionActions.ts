@@ -21,6 +21,13 @@ export interface VersionActionConfig {
  */
 export const versionActions: VersionActionConfig[] = [
     {
+        id: 'copy-path',
+        title: 'Copy version file path',
+        icon: 'copy',
+        tooltip: 'Copy the stored version file path to the clipboard',
+        actionHandler: (version, store) => store.dispatch(thunks.copyVersionPath(version)),
+    },
+    {
         id: 'restore',
         title: 'Restore this version',
         icon: 'rotate-ccw',
@@ -54,13 +61,6 @@ export const versionActions: VersionActionConfig[] = [
         icon: 'download',
         tooltip: 'Export this specific version to a file',
         actionHandler: (version, store) => store.dispatch(thunks.requestExportSingleVersion(version)),
-    },
-    {
-        id: 'copy-path',
-        title: 'Copy version file path',
-        icon: 'copy',
-        tooltip: 'Copy the stored version file path to the clipboard',
-        actionHandler: (version, store) => store.dispatch(thunks.copyVersionPath(version)),
     },
     {
         id: 'delete',

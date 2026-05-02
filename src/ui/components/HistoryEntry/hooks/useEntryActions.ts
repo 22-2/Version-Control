@@ -15,7 +15,6 @@ export function useEntryActions(
     ignoreBlurRef: React.MutableRefObject<boolean>
 ) {
     const dispatch = useAppDispatch();
-    const isEditButtonAction = useRef(false);
     const shouldIgnoreClickRef = useRef(false);
 
     const saveDetails = useCallback(() => {
@@ -70,26 +69,32 @@ export function useEntryActions(
             e.preventDefault();
             e.stopPropagation();
         } catch { /* noop */ }
-        dispatch(thunks.showVersionContextMenu(version));
+        dispatch(thunks.showVersionContextMenu(version, { mouseEvent: e.nativeEvent }));
     }, [dispatch, version]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
             if (e.target instanceof HTMLElement && (e.target.matches('input, textarea'))) return;
             try {
                 e.preventDefault();
                 e.stopPropagation();
             } catch { /* noop */ }
-            dispatch(thunks.showVersionContextMenu(version));
+
+            const rect = entryRef.current?.getBoundingClientRect();
+            if (!rect) return;
+
+            // Keyboard-triggered menus need an explicit anchor because there is no mouse event.
+            dispatch(thunks.showVersionContextMenu(version, {
+                position: {
+                    x: rect.right,
+                    y: rect.bottom,
+                },
+            }));
         }
-    }, [dispatch, version]);
+    }, [dispatch, entryRef, version]);
 
     const handleContainerBlur = useCallback((e: FocusEvent<HTMLDivElement>) => {
         if (ignoreBlurRef.current) return;
-        if (isEditButtonAction.current) {
-            isEditButtonAction.current = false;
-            return;
-        }
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
             saveDetails();
         }
@@ -138,7 +143,6 @@ export function useEntryActions(
     }, [isNamingThisVersion, saveDetails, entryRef]);
 
     return {
-        isEditButtonAction,
         handleMouseDown,
         handleEntryClick,
         handleContextMenu,

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useAppSelector } from '@/ui/hooks';
 import { useTime } from '@/ui/contexts';
 import { HighlightedText } from '@/ui/components/shared/HighlightedText';
-import { EntryHeader, EntryMetadata, EntryActions, EntryEditor } from '@/ui/components/HistoryEntry/components';
+import { EntryHeader, EntryMetadata, EntryEditor } from '@/ui/components/HistoryEntry/components';
 import { useEntryEdit, useEntryActions, useEntryHighlight } from '@/ui/components/HistoryEntry/hooks';
 import { formatTimestamp, getDisplaySize, getStatCounts } from '@/ui/components/HistoryEntry/utils';
 import type { HistoryEntryProps } from '@/ui/components/HistoryEntry/types';
@@ -33,7 +33,6 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
     );
 
     const {
-        isEditButtonAction,
         handleMouseDown,
         handleEntryClick,
         handleContextMenu,
@@ -72,7 +71,6 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
 
     const hasDescription = !!version.description && version.description.trim().length > 0;
     const shouldShowDescription = hasDescription && (isSearchActive || settings.showDescriptionInList);
-    const showFooterDescription = shouldShowDescription && !settings.isListView;
     const showListDescription = shouldShowDescription && settings.isListView;
 
     const prefix = viewMode === 'edits' ? 'E' : 'V';
@@ -156,27 +154,7 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
                     />
                 </div>
             )}
-
-            {!settings?.isListView && (
-                <div className={clsx("v-entry-footer", { 'v-is-hidden': isNamingThisVersion })}>
-                    {showFooterDescription ? (
-                        <div className="v-history-description">
-                            <HighlightedText
-                                text={version.description || ''}
-                                {...(searchQuery && { query: searchQuery })}
-                                {...(isSearchCaseSensitive !== undefined && { caseSensitive: isSearchCaseSensitive })}
-                            />
-                        </div>
-                    ) : (
-                        <EntryActions
-                            version={version}
-                            showFooterDescription={showFooterDescription}
-                            viewMode={viewMode}
-                            isEditButtonAction={isEditButtonAction}
-                        />
-                    )}
-                </div>
-            )}
+            {/* Card mode no longer renders a footer; actions live in the context menu only. */}
         </motion.div>
     );
 });
