@@ -651,29 +651,10 @@
     width: 100%;
 }
 
-/* Toggles (checkboxes) - Full Width Styling */
-body .v-settings-panel .setting-item-control input[type="checkbox"] {
-    margin-left: 0;
-    width: 100%;
-    max-width: none;
-    cursor: pointer;
-    position: relative;
-    /* Ensure height is standard to prevent distortion if width forces aspect ratio changes */
-    height: 18px; 
-    box-sizing: border-box;
-}
-
-/* Override Obsidian's transform-based animation for the full-width toggle */
-body .v-settings-panel .setting-item-control input[type="checkbox"]::after {
-    transition: left 0.2s ease-in-out, background-color 0.2s ease-in-out !important;
-    transform: none !important;
-    will-change: left;
-}
-
-body .v-settings-panel .setting-item-control input[type="checkbox"]:checked::after {
-    /* Position at far right: 100% - knob width (approx 18px) - margin (2px) */
-    left: calc(100% - 20px) !important;
-    transform: none !important;
+/* Keep toggles at Obsidian's native size inside the full-width control row. */
+.v-settings-panel .setting-item-control input[type="checkbox"] {
+    align-self: flex-end;
+    flex: 0 0 auto;
 }
 
 /* Slider container adjustments for panel */
