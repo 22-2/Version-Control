@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { type FC, useRef, memo, useMemo } from 'react';
+import { type FC, useRef, memo, useMemo, useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAppSelector } from '@/ui/hooks';
 import { useTime } from '@/ui/contexts';
@@ -70,8 +70,17 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
     const { wordCount, charCount, lineCount } = getStatCounts(version, settings);
 
     const hasDescription = !!version.description && version.description.trim().length > 0;
-    const shouldShowDescription = hasDescription && (isSearchActive || settings.showDescriptionInList);
-    const showListDescription = shouldShowDescription && settings.isListView;
+    const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(
+        hasDescription && (isSearchActive || settings.showDescriptionInList)
+    );
+
+    useEffect(() => {
+        setIsDescriptionExpanded(hasDescription && (isSearchActive || settings.showDescriptionInList));
+    }, [hasDescription, isSearchActive, settings.showDescriptionInList]);
+
+    const handleToggleDescription = useCallback(() => {
+        setIsDescriptionExpanded((isExpanded) => !isExpanded);
+    }, []);
 
     const prefix = viewMode === 'edits' ? 'E' : 'V';
     const placeholderName = viewMode === 'edits' ? 'Edit name...' : 'Version name...';
@@ -122,6 +131,9 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
                 handleNameInputKeyDown={handleNameInputKeyDown}
                 prefix={prefix}
                 nameInputRef={nameInputRef}
+                hasDescription={hasDescription}
+                isDescriptionExpanded={isDescriptionExpanded}
+                onToggleDescription={handleToggleDescription}
             />
 
             <EntryMetadata
@@ -145,8 +157,8 @@ export const HistoryEntry: FC<HistoryEntryProps> = memo(({ version, searchQuery,
                 descTextareaRef={descTextareaRef}
             />
 
-            {showListDescription && !isNamingThisVersion && (
-                <div className="v-history-description">
+            {hasDescription && isDescriptionExpanded && !isNamingThisVersion && (
+                <div className="v-history-description" role="region" aria-label="Description">
                     <HighlightedText
                         text={version.description || ''}
                         {...(searchQuery && { query: searchQuery })}

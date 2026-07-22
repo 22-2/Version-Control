@@ -38,6 +38,9 @@ export interface EntryHeaderProps {
     handleNameInputKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
     prefix: string;
     nameInputRef: RefObject<HTMLInputElement | null>;
+    hasDescription: boolean;
+    isDescriptionExpanded: boolean;
+    onToggleDescription: () => void;
 }
 
 export interface EntryEditorProps {

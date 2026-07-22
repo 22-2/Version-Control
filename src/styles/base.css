@@ -163,6 +163,7 @@
 .version-control-content.is-processing input,
 .version-control-content.is-processing .clickable-icon,
 .version-control-content.is-processing .v-history-entry.is-list-view,
+.version-control-content.is-processing .v-history-table-row,
 .version-control-content.is-processing .setting-item-control {
     pointer-events: none;
     opacity: 0.6;

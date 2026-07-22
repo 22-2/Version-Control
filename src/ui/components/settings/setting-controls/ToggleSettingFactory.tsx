@@ -52,15 +52,15 @@ export const EnableDescriptionSetting = createToggleSetting(
 EnableDescriptionSetting.displayName = 'EnableDescriptionSetting';
 
 export const ShowDescriptionInListSetting = createToggleSetting(
-    'Show description in list',
-    (mode) => `If enabled, displays the ${mode === 'versions' ? 'version' : 'edit'} description in the history list instead of action buttons.`,
+    'Expand descriptions by default',
+    (mode) => `Automatically expands descriptions in the ${mode === 'versions' ? 'version' : 'edit'} table.`,
     'showDescriptionInList'
 );
 ShowDescriptionInListSetting.displayName = 'ShowDescriptionInListSetting';
 
 export const ListViewSetting = createToggleSetting(
-    'Compact list view', 
-    (mode) => `Display ${mode === 'versions' ? 'version' : 'edit'} history as a compact list. Otherwise, shows as cards.`, 
+    'Compact table rows',
+    (mode) => `Use denser rows in the ${mode === 'versions' ? 'version' : 'edit'} table.`,
     'isListView'
 );
 ListViewSetting.displayName = 'ListViewSetting';

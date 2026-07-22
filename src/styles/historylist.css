@@ -46,6 +46,220 @@
     padding-top: var(--size-4-2);
 }
 
+/* TanStack commit table */
+.v-history-table-scroll {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    padding-bottom: calc(var(--size-4-4) * 3);
+}
+
+.v-history-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-size: var(--font-ui-smaller);
+}
+
+.v-history-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.v-history-table th {
+    height: 34px;
+    padding: 0 var(--size-4-2);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-size: var(--font-ui-smaller);
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.v-history-table th[data-column-id="descriptionToggle"] {
+    padding: 0;
+}
+
+.v-history-table-sort {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-1);
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.v-history-table-sort:hover,
+.v-history-table-sort:focus-visible {
+    color: var(--text-normal);
+    outline: none;
+}
+
+.v-history-table-sort .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.v-history-table-row {
+    cursor: pointer;
+    outline: none;
+}
+
+.v-history-table td {
+    padding: var(--size-4-2);
+    background: var(--background-primary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background-color 120ms ease-out;
+}
+
+.v-history-table td[data-column-id="descriptionToggle"] {
+    padding-left: var(--size-4-1);
+    padding-right: 0;
+    text-align: center;
+    overflow: visible;
+}
+
+.v-history-table td[data-column-id="timestamp"],
+.v-history-table td[data-column-id="size"],
+.v-history-table td[data-column-id="words"],
+.v-history-table td[data-column-id="characters"],
+.v-history-table td[data-column-id="lines"] {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.v-history-table-row-group:not(.is-naming) .v-history-table-row:hover td,
+.v-history-table-row-group:not(.is-naming) .v-history-table-row:focus-visible td {
+    background: var(--background-modifier-hover);
+}
+
+.v-history-table-row-group.is-highlighted td {
+    background: var(--background-modifier-active-hover);
+}
+
+.v-history-table-row-group.is-highlighted .v-history-table-row td:first-child,
+.v-history-table-row-group.is-naming .v-history-table-row td:first-child {
+    box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+
+.v-history-table-row-group.is-naming td {
+    background: var(--background-secondary);
+}
+
+.v-history-table-row-group.is-expanded .v-history-table-row td {
+    border-bottom: 0;
+}
+
+.v-history-table-description-row td {
+    padding: 0 var(--size-4-3) var(--size-4-3) 48px;
+    background: var(--background-secondary);
+    white-space: normal;
+}
+
+.v-history-table-description {
+    padding: var(--size-4-2) var(--size-4-3);
+    border-left: 2px solid var(--background-modifier-border);
+    color: var(--text-muted);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.v-history-table-expander {
+    color: var(--text-muted);
+}
+
+.v-history-table-expander:hover,
+.v-history-table-expander:focus-visible {
+    color: var(--text-normal);
+}
+
+.v-history-table-expander .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.v-history-table-commit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    padding: 2px var(--size-4-1);
+    border-radius: var(--radius-s);
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.v-history-table-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.v-history-table-empty {
+    color: var(--text-faint);
+    font-style: italic;
+}
+
+.version-control-view .v-history-table-name-input {
+    width: 100%;
+    min-width: 0;
+    padding: 2px 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--interactive-accent);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-normal);
+    font: inherit;
+    font-weight: 500;
+}
+
+.version-control-view .v-history-table-name-input:focus {
+    box-shadow: none;
+    outline: none;
+}
+
+.v-history-table-description-row .v-entry-description-editor {
+    margin-top: 0;
+    padding-top: var(--size-4-2);
+}
+
+.v-history-table.is-compact th {
+    height: 28px;
+}
+
+.v-history-table.is-compact td {
+    padding-top: var(--size-4-1);
+    padding-bottom: var(--size-4-1);
+}
+
+.v-history-table-skeleton {
+    display: block;
+    width: 70%;
+    height: 14px;
+    border-radius: var(--radius-s);
+}
+
 /* NEW: Scrollable container for manual content (e.g. loading skeletons) */
 .v-history-manual-scroll {
     height: 100%;
@@ -167,6 +381,17 @@
     white-space: nowrap;
     flex-shrink: 0;
 }
+
+.v-description-toggle {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.v-description-toggle:hover,
+.v-description-toggle:focus-visible {
+    color: var(--text-normal);
+}
+
 .v-version-content {
     font-size: var(--font-ui-smaller);
     color: var(--text-muted);

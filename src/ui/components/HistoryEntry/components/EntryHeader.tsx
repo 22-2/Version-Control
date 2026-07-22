@@ -1,5 +1,6 @@
 import { type FC, memo } from 'react';
 import { HighlightedText } from '@/ui/components/shared/HighlightedText';
+import { Icon } from '@/ui/components/Icon';
 import { MAX_NAME_LENGTH, type EntryHeaderProps } from '@/ui/components/HistoryEntry/types';
 
 export const EntryHeader: FC<EntryHeaderProps> = memo(({
@@ -15,6 +16,9 @@ export const EntryHeader: FC<EntryHeaderProps> = memo(({
     handleNameInputKeyDown,
     prefix,
     nameInputRef,
+    hasDescription,
+    isDescriptionExpanded,
+    onToggleDescription,
 }) => {
     return (
         <div className="v-entry-header">
@@ -62,6 +66,25 @@ export const EntryHeader: FC<EntryHeaderProps> = memo(({
                     {...(isSearchCaseSensitive !== undefined && { caseSensitive: isSearchCaseSensitive })}
                 />
             </span>
+
+            {hasDescription && !showNameEditor && (
+                <button
+                    type="button"
+                    className="v-description-toggle clickable-icon"
+                    aria-label={`${isDescriptionExpanded ? 'Collapse' : 'Expand'} description`}
+                    aria-expanded={isDescriptionExpanded}
+                    title={`${isDescriptionExpanded ? 'Collapse' : 'Expand'} description`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleDescription();
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                >
+                    <Icon name={isDescriptionExpanded ? 'chevron-up' : 'chevron-down'} />
+                </button>
+            )}
         </div>
     );
 });

@@ -4,14 +4,14 @@ import type { VersionHistoryEntry as VersionHistoryEntryType, ViewMode } from '@
 import { thunks, appSlice } from '@/state';
 import { trimName, trimDescription, hasChanged } from '@/ui/components/HistoryEntry/utils';
 
-export function useEntryActions(
+export function useEntryActions<T extends HTMLElement>(
     version: VersionHistoryEntryType,
     viewMode: ViewMode,
     namingVersionId: string | null,
     isNamingThisVersion: boolean,
     nameValue: string,
     descValue: string,
-    entryRef: React.RefObject<HTMLDivElement | null>,
+    entryRef: React.RefObject<T | null>,
     ignoreBlurRef: React.MutableRefObject<boolean>
 ) {
     const dispatch = useAppDispatch();
@@ -40,7 +40,7 @@ export function useEntryActions(
         }
     }, [dispatch, version.id, version.name, version.description, nameValue, descValue, viewMode]);
 
-    const handleMouseDown = useCallback((_e: MouseEvent<HTMLDivElement>) => {
+    const handleMouseDown = useCallback((_e: MouseEvent<T>) => {
         if (namingVersionId !== null) {
             shouldIgnoreClickRef.current = true;
         } else {
@@ -48,7 +48,7 @@ export function useEntryActions(
         }
     }, [namingVersionId]);
 
-    const handleEntryClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const handleEntryClick = useCallback((e: MouseEvent<T>) => {
         try {
             e.preventDefault();
             e.stopPropagation();
@@ -62,7 +62,7 @@ export function useEntryActions(
         dispatch(thunks.viewVersionInPanel(version));
     }, [dispatch, version]);
 
-    const handleContextMenu = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const handleContextMenu = useCallback((e: MouseEvent<T>) => {
         if (e.target instanceof HTMLElement && (e.target.matches('input, textarea'))) return;
 
         try {
@@ -72,7 +72,7 @@ export function useEntryActions(
         dispatch(thunks.showVersionContextMenu(version, { mouseEvent: e.nativeEvent }));
     }, [dispatch, version]);
 
-    const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    const handleKeyDown = useCallback((e: KeyboardEvent<T>) => {
         if (e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
             if (e.target instanceof HTMLElement && (e.target.matches('input, textarea'))) return;
             try {
@@ -93,7 +93,7 @@ export function useEntryActions(
         }
     }, [dispatch, entryRef, version]);
 
-    const handleContainerBlur = useCallback((e: FocusEvent<HTMLDivElement>) => {
+    const handleContainerBlur = useCallback((e: FocusEvent<T>) => {
         if (ignoreBlurRef.current) return;
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
             saveDetails();

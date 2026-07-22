@@ -1,55 +1,40 @@
 import { moment } from 'obsidian';
 import { orderBy } from 'es-toolkit';
 import clsx from 'clsx';
-import { type FC, useEffect, useMemo, memo } from 'react';
-import { Virtuoso } from 'react-virtuoso';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAppSelector } from '@/ui/hooks';
-import { AppStatus } from '@/state';
-import type { VersionHistoryEntry as VersionHistoryEntryType } from '@/types';
+import { type FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    flexRender,
+    getCoreRowModel,
+    getExpandedRowModel,
+    getSortedRowModel,
+    useReactTable,
+    type ColumnDef,
+    type ExpandedState,
+    type OnChangeFn,
+    type SortingState,
+} from '@tanstack/react-table';
+import { AppStatus, appSlice, type SortProperty } from '@/state';
+import type { VersionHistoryEntry, ViewMode } from '@/types';
+import { useAppDispatch, useAppSelector } from '@/ui/hooks';
+import { useTime } from '@/ui/contexts';
 import { formatFileSize } from '@/ui/utils/dom';
-import { HistoryEntry } from '@/ui/components';
-import { Icon } from '@/ui/components';
+import { Icon } from '@/ui/components/Icon';
+import { HighlightedText } from '@/ui/components/shared/HighlightedText';
+import {
+    HistoryDescriptionToggleCell,
+    HistoryNameCell,
+    HistoryTableRow,
+} from '@/ui/components/HistoryTableRow';
+import { formatTimestamp, getDisplaySize, getStatCounts } from '@/ui/components/HistoryEntry/utils';
 import { useGetVersionHistoryQuery, useGetEditHistoryQuery } from '@/state/apis/history.api';
 
-const SkeletonEntry: FC<{ isListView: boolean }> = memo(({ isListView }) => (
-    <motion.div 
-        className={clsx('v-history-entry', 'is-skeleton', { 'is-list-view': isListView })} 
-        aria-hidden
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-    >
-        {isListView ? (
-            <>
-                <div className="v-entry-header">
-                    <div className="v-version-id v-skeleton-item" />
-                    <div className="v-entry-main-info">
-                        <div className="v-version-name v-skeleton-item" />
-                    </div>
-                    <div className="v-version-timestamp v-skeleton-item" />
-                </div>
-                <div className="v-version-content v-skeleton-item" />
-            </>
-        ) : (
-            <>
-                <div className="v-entry-header">
-                    <div className="v-version-id v-skeleton-item" />
-                    <div className="v-version-name v-skeleton-item" />
-                    <div className="v-version-timestamp v-skeleton-item" />
-                </div>
-                <div className="v-version-content v-skeleton-item" />
-            </>
-        )}
-    </motion.div>
-));
-SkeletonEntry.displayName = 'SkeletonEntry';
+const SORTABLE_COLUMN_IDS = new Set<SortProperty>(['versionNumber', 'timestamp', 'name', 'size']);
 
-const EmptyState: FC<{ icon: string; title: string; subtitle?: string }> = memo(({ icon, title, subtitle }) => (
-    <motion.div 
-        className="v-empty-state" 
-        role="status" 
+const EmptyState: FC<{ icon: string; title: string; subtitle?: string }> = ({ icon, title, subtitle }) => (
+    <motion.div
+        className="v-empty-state"
+        role="status"
         aria-live="polite"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -60,23 +45,14 @@ const EmptyState: FC<{ icon: string; title: string; subtitle?: string }> = memo(
         <p className="v-empty-state-title">{title}</p>
         {subtitle && <p className="v-empty-state-subtitle v-meta-label">{subtitle}</p>}
     </motion.div>
-));
-EmptyState.displayName = 'EmptyState';
+);
 
-/** Safe wrapper for moment: don't allow exceptions bubbling up. */
 function safeFormatTimestamp(raw: unknown, formatStr = 'LLLL'): string {
     try {
-        // moment may throw if value invalid
         return (moment as any)(raw).format(formatStr);
     } catch {
-        try {
-            // fallback to using Date toISOString
-            const d = new Date(String(raw));
-            if (!Number.isNaN(d.getTime())) return d.toISOString();
-        } catch {
-            /* swallow */
-        }
-        return '';
+        const date = new Date(String(raw));
+        return Number.isNaN(date.getTime()) ? '' : date.toISOString();
     }
 }
 
@@ -84,9 +60,9 @@ interface HistoryListProps {
     onCountChange: (filteredCount: number, totalCount: number) => void;
 }
 
-/** Main list component */
 export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
-    // Use individual selectors to prevent unnecessary re-renders when unrelated state changes
+    const dispatch = useAppDispatch();
+    const { now } = useTime();
     const status = useAppSelector(state => state.app.status);
     const noteId = useAppSelector(state => state.app.noteId);
     const viewMode = useAppSelector(state => state.app.viewMode);
@@ -94,238 +70,332 @@ export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
     const isSearchCaseSensitive = useAppSelector(state => state.app.isSearchCaseSensitive);
     const sortOrder = useAppSelector(state => state.app.sortOrder ?? { property: 'versionNumber', direction: 'desc' });
     const settings = useAppSelector(state => state.app.effectiveSettings);
-    
-    // Optimization: Only subscribe to whether a panel is open (boolean), not the panel object itself.
-    // This prevents re-renders when switching between different panel types (e.g. diff -> settings)
-    // if the visual layout of the list (shrunk vs full width) remains the same.
+    const enableCompression = useAppSelector(state => state.app.settings.enableCompression);
     const isPanelOpen = useAppSelector(state => state.app.panel !== null);
 
-    // RTK Query Hooks
-    // We conditionally skip queries if noteId is missing
     const skipQuery = !noteId;
-    
-    // Pass noteId! because skipQuery handles the null case, but TS needs a string.
-    const versionHistoryQuery = useGetVersionHistoryQuery(noteId!, { 
-        skip: skipQuery || viewMode !== 'versions' 
+    const versionHistoryQuery = useGetVersionHistoryQuery(noteId!, {
+        skip: skipQuery || viewMode !== 'versions',
     });
-    
-    const editHistoryQuery = useGetEditHistoryQuery(noteId!, { 
-        skip: skipQuery || viewMode !== 'edits' 
+    const editHistoryQuery = useGetEditHistoryQuery(noteId!, {
+        skip: skipQuery || viewMode !== 'edits',
     });
-
-    const { data: queryData, isFetching, isLoading } = viewMode === 'versions' ? versionHistoryQuery : editHistoryQuery;
-
-    // Defensive: If noteId is null, force activeList to be undefined/empty to prevent "ghost data"
-    // from previous queries persisting when switching to an unregistered note.
+    const { data: queryData, isFetching, isLoading } = viewMode === 'versions'
+        ? versionHistoryQuery
+        : editHistoryQuery;
     const activeList = noteId ? queryData : undefined;
+    const trimmedQuery = searchQuery.trim();
+    const isSearching = trimmedQuery.length > 0;
 
-    // Use isListView from effective settings
-    const isListView = settings.isListView;
-
-    // Memoize the processed history to ensure synchronous updates with state changes.
-    const processedHistory = useMemo(() => {
-        // If loading, we don't process anything, the render logic will show skeletons.
+    const filteredHistory = useMemo(() => {
         if (isLoading || isFetching || !activeList) return [];
 
-        const src = Array.isArray(activeList) ? activeList : [];
-        const trimmedQuery = String(searchQuery ?? '').trim();
+        const source = Array.isArray(activeList) ? activeList : [];
+        if (!isSearching) return source;
 
-        if (trimmedQuery === '') {
-            const iteratee = (v: VersionHistoryEntryType): string | number => {
-                const prop = sortOrder?.property ?? 'versionNumber';
-                switch (prop) {
-                    case 'name':
-                        return (String(v.name ?? '').toLowerCase()) || '\uffff';
-                    case 'size':
-                        return typeof v.size === 'number' ? v.size : 0;
-                    case 'timestamp': {
-                        const ms = (() => {
-                            const t = v.timestamp;
-                            const parsed = Number(new Date(String(t)));
-                            return Number.isFinite(parsed) ? parsed : 0;
-                        })();
-                        return ms;
-                    }
-                    case 'versionNumber':
-                    default:
-                        const num = Number((v as any).versionNumber);
-                        return Number.isFinite(num) ? num : 0;
-                }
-            };
-
-            const dir = sortOrder?.direction === 'asc' ? 'asc' : 'desc';
-            return orderBy(src, [iteratee], [dir]);
-        }
-
-        // Search Logic
         const query = isSearchCaseSensitive ? trimmedQuery : trimmedQuery.toLowerCase();
-
-        // Calculate score for each item
-        const scored = src.map(v => {
+        const check = (value: string) => isSearchCaseSensitive ? value : value.toLowerCase();
+        const prefix = viewMode === 'edits' ? 'E' : 'V';
+        const scored = source.map(version => {
             let score = 0;
-            const versionId = `V${v.versionNumber ?? ''}`;
-            const name = String(v.name ?? '');
-            const description = String(v.description ?? '');
-            
-            const size = formatFileSize(typeof v.size === 'number' ? v.size : 0);
-            
-            const timestampStr = settings.useRelativeTimestamps 
-                ? (() => { try { return (moment as any)(v.timestamp).fromNow(true); } catch { return ''; } })()
-                : safeFormatTimestamp(v.timestamp, 'LLLL');
+            const commitId = `${prefix}${version.versionNumber ?? ''}`;
+            const name = String(version.name ?? '');
+            const description = String(version.description ?? '');
+            const size = formatFileSize(getDisplaySize(enableCompression, version));
+            const timestamp = settings.useRelativeTimestamps
+                ? (() => { try { return (moment as any)(version.timestamp).fromNow(true); } catch { return ''; } })()
+                : safeFormatTimestamp(version.timestamp);
+            const { wordCount, charCount, lineCount } = getStatCounts(version, settings);
 
-            const wordCount = settings.enableWordCount 
-                ? String(settings.includeMdSyntaxInWordCount ? v.wordCountWithMd : v.wordCount) 
-                : '';
-            const charCount = settings.enableCharacterCount
-                ? String(settings.includeMdSyntaxInCharacterCount ? v.charCountWithMd : v.charCount)
-                : '';
-            const lineCount = settings.enableLineCount
-                ? String(settings.includeMdSyntaxInLineCount ? v.lineCount : v.lineCountWithoutMd)
-                : '';
+            if (check(commitId) === query) score += 100;
+            else if (check(commitId).includes(query)) score += 80;
+            if (check(name).startsWith(query)) score += 60;
+            else if (check(name).includes(query)) score += 50;
+            if (check(description).includes(query)) score += 40;
+            if (check(size).includes(query)) score += 20;
+            if (check(timestamp).includes(query)) score += 20;
+            if (settings.enableWordCount && check(String(wordCount ?? '')) === query) score += 15;
+            if (settings.enableCharacterCount && check(String(charCount ?? '')) === query) score += 15;
+            if (settings.enableLineCount && check(String(lineCount ?? '')) === query) score += 15;
 
-            const check = (val: string) => isSearchCaseSensitive ? val : val.toLowerCase();
-            const q = query;
-
-            if (check(versionId) === q) score += 100;
-            else if (check(versionId).includes(q)) score += 80;
-
-            if (check(name).startsWith(q)) score += 60;
-            else if (check(name).includes(q)) score += 50;
-
-            if (check(description).includes(q)) score += 40;
-
-            if (check(size).includes(q)) score += 20;
-            if (check(timestampStr).includes(q)) score += 20;
-            
-            if (wordCount && check(wordCount) === q) score += 15;
-            if (charCount && check(charCount) === q) score += 15;
-            if (lineCount && check(lineCount) === q) score += 15;
-
-            return { version: v, score };
+            return { version, score };
         });
 
-        const filteredScored = scored.filter(item => item.score > 0);
-        const sortedByScore = orderBy(filteredScored, ['score'], ['desc']);
-        return sortedByScore.map(item => item.version);
+        return orderBy(scored.filter(item => item.score > 0), ['score'], ['desc'])
+            .map(item => item.version);
+    }, [
+        activeList,
+        enableCompression,
+        isFetching,
+        isLoading,
+        isSearchCaseSensitive,
+        isSearching,
+        settings,
+        trimmedQuery,
+        viewMode,
+    ]);
 
-    }, [activeList, isLoading, isFetching, searchQuery, isSearchCaseSensitive, sortOrder, settings]);
+    const columns = useMemo<ColumnDef<VersionHistoryEntry>[]>(() => {
+        const prefix = viewMode === 'edits' ? 'E' : 'V';
+        const baseColumns: ColumnDef<VersionHistoryEntry>[] = [
+            {
+                id: 'descriptionToggle',
+                header: '',
+                cell: () => <HistoryDescriptionToggleCell />,
+                enableSorting: false,
+                size: 36,
+            },
+            {
+                accessorKey: 'versionNumber',
+                header: 'Commit',
+                cell: ({ row }) => (
+                    <span className="v-history-table-commit">
+                        <HighlightedText
+                            text={`${prefix}${row.original.versionNumber}`}
+                            {...(searchQuery && { query: searchQuery })}
+                            caseSensitive={isSearchCaseSensitive}
+                        />
+                    </span>
+                ),
+                sortDescFirst: true,
+                size: 72,
+            },
+            {
+                id: 'name',
+                accessorFn: row => row.name?.toLocaleLowerCase() || '\uffff',
+                header: 'Name',
+                cell: () => <HistoryNameCell />,
+                sortDescFirst: false,
+                size: 240,
+            },
+            {
+                id: 'timestamp',
+                accessorFn: row => Date.parse(row.timestamp) || 0,
+                header: 'Date',
+                cell: ({ row }) => {
+                    const { timestampText, tooltipTimestamp } = formatTimestamp(
+                        row.original.timestamp,
+                        settings.useRelativeTimestamps,
+                        now
+                    );
+                    return (
+                        <span title={tooltipTimestamp}>
+                            <HighlightedText
+                                text={timestampText}
+                                {...(searchQuery && { query: searchQuery })}
+                                caseSensitive={isSearchCaseSensitive}
+                            />
+                        </span>
+                    );
+                },
+                sortDescFirst: true,
+                size: 152,
+            },
+            {
+                id: 'size',
+                accessorFn: row => getDisplaySize(enableCompression, row),
+                header: 'Size',
+                cell: ({ getValue }) => {
+                    const value = formatFileSize(Number(getValue()));
+                    return <HighlightedText text={value} {...(searchQuery && { query: searchQuery })} caseSensitive={isSearchCaseSensitive} />;
+                },
+                sortDescFirst: true,
+                size: 88,
+            },
+        ];
 
-    // Notify parent of count changes
+        const statColumns: ColumnDef<VersionHistoryEntry>[] = [];
+        if (settings.enableWordCount) {
+            statColumns.push({
+                id: 'words',
+                accessorFn: row => getStatCounts(row, settings).wordCount ?? 0,
+                header: 'Words',
+                cell: ({ getValue }) => String(getValue()),
+                enableSorting: false,
+                size: 76,
+            });
+        }
+        if (settings.enableCharacterCount) {
+            statColumns.push({
+                id: 'characters',
+                accessorFn: row => getStatCounts(row, settings).charCount ?? 0,
+                header: 'Chars',
+                cell: ({ getValue }) => String(getValue()),
+                enableSorting: false,
+                size: 76,
+            });
+        }
+        if (settings.enableLineCount) {
+            statColumns.push({
+                id: 'lines',
+                accessorFn: row => getStatCounts(row, settings).lineCount ?? 0,
+                header: 'Lines',
+                cell: ({ getValue }) => String(getValue()),
+                enableSorting: false,
+                size: 70,
+            });
+        }
+        return [...baseColumns, ...statColumns];
+    }, [enableCompression, isSearchCaseSensitive, now, searchQuery, settings, viewMode]);
+
+    const sorting = useMemo<SortingState>(() => isSearching ? [] : [{
+        id: sortOrder.property,
+        desc: sortOrder.direction === 'desc',
+    }], [isSearching, sortOrder.direction, sortOrder.property]);
+    const [expanded, setExpanded] = useState<ExpandedState>({});
+
+    useEffect(() => {
+        if (!settings.showDescriptionInList && !isSearching) {
+            setExpanded({});
+            return;
+        }
+        const expandedRows = Object.fromEntries(
+            filteredHistory
+                .filter(version => Boolean(version.description?.trim()))
+                .map(version => [version.id, true])
+        );
+        setExpanded(expandedRows);
+    }, [filteredHistory, isSearching, noteId, settings.showDescriptionInList, trimmedQuery, viewMode]);
+
+    const handleSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
+        const nextSorting = typeof updater === 'function' ? updater(sorting) : updater;
+        const next = nextSorting[0];
+        if (!next || !SORTABLE_COLUMN_IDS.has(next.id as SortProperty)) return;
+        dispatch(appSlice.actions.setSortOrder({
+            property: next.id as SortProperty,
+            direction: next.desc ? 'desc' : 'asc',
+        }));
+    }, [dispatch, sorting]);
+
+    const table = useReactTable({
+        data: filteredHistory,
+        columns,
+        state: { sorting, expanded },
+        onSortingChange: handleSortingChange,
+        onExpandedChange: setExpanded,
+        getRowId: row => row.id,
+        getRowCanExpand: row => Boolean(row.original.description?.trim()),
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getExpandedRowModel: getExpandedRowModel(),
+        enableMultiSort: false,
+        enableSortingRemoval: false,
+        enableSorting: !isSearching,
+    });
+
     useEffect(() => {
         const total = Array.isArray(activeList) ? activeList.length : 0;
-        const filtered = processedHistory.length;
-        onCountChange(filtered, total);
-    }, [processedHistory.length, activeList, onCountChange]);
+        onCountChange(filteredHistory.length, total);
+    }, [activeList, filteredHistory.length, onCountChange]);
 
-    // Unique key to force Virtuoso remount on layout changes
-    const listKey = `list-${viewMode}-${isListView ? 'list' : 'card'}`;
     const total = Array.isArray(activeList) ? activeList.length : 0;
+    const visibleCellCount = table.getVisibleLeafColumns().length;
+
+    const renderHeader = () => (
+        <thead>
+            {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id}>
+                    {headerGroup.headers.map(header => {
+                        const sorted = header.column.getIsSorted();
+                        const ariaSort = sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none';
+                        return (
+                            <th
+                                key={header.id}
+                                data-column-id={header.column.id}
+                                aria-sort={header.column.getCanSort() ? ariaSort : undefined}
+                                style={{ width: header.getSize() }}
+                            >
+                                {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                                    <div
+                                        className="v-history-table-sort"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={header.column.getToggleSortingHandler()}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                header.column.toggleSorting();
+                                            }
+                                        }}
+                                        title={`Sort by ${String(header.column.columnDef.header)}`}
+                                    >
+                                        {flexRender(header.column.columnDef.header, header.getContext())}
+                                        {sorted && <Icon name={sorted === 'asc' ? 'arrow-up' : 'arrow-down'} />}
+                                    </div>
+                                ) : flexRender(header.column.columnDef.header, header.getContext())}
+                            </th>
+                        );
+                    })}
+                </tr>
+            ))}
+        </thead>
+    );
 
     const renderContent = () => {
-        // STRICT: If loading, show skeletons.
         if (isLoading || isFetching || status === AppStatus.LOADING) {
             return (
-                <motion.div 
-                    key="loading"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className={clsx('v-history-manual-scroll', { 'is-list-view': isListView })}
-                >
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className={isListView ? 'v-history-item-list-wrapper' : 'v-history-item-card-wrapper'}>
-                            <SkeletonEntry isListView={isListView} />
-                        </div>
-                    ))}
-                </motion.div>
+                <div key="loading" className="v-history-table-scroll">
+                    <table className="v-history-table is-loading">
+                        {renderHeader()}
+                        <tbody>
+                            {Array.from({ length: 8 }, (_, index) => (
+                                <tr key={index} aria-hidden>
+                                    {table.getVisibleLeafColumns().map(column => (
+                                        <td key={column.id} data-column-id={column.id}>
+                                            <span className="v-history-table-skeleton v-skeleton-item" />
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             );
         }
 
         if (status !== AppStatus.READY) return null;
-
         if (total === 0) {
             const noun = viewMode === 'versions' ? 'versions' : 'edits';
             const action = viewMode === 'versions' ? 'track history' : 'track edits';
-            return (
-                <EmptyState 
-                    key="empty" 
-                    icon="inbox" 
-                    title={`No ${noun} saved yet.`} 
-                    subtitle={`Click the '+' button to start ${action} for this note.`} 
-                />
-            );
+            return <EmptyState key="empty" icon="inbox" title={`No ${noun} saved yet.`} subtitle={`Click the '+' button to start ${action} for this note.`} />;
         }
-        
-        if (processedHistory.length === 0 && String(searchQuery ?? '').trim()) {
-            return (
-                <EmptyState 
-                    key="no-results" 
-                    icon="search-x" 
-                    title="No matching items found." 
-                    subtitle="Try a different search query or change sort options." 
-                />
-            );
+        if (filteredHistory.length === 0 && isSearching) {
+            return <EmptyState key="no-results" icon="search-x" title="No matching items found." subtitle="Try a different search query." />;
         }
 
         return (
-            <motion.div 
-                key={listKey}
-                className="v-virtuoso-container"
+            <motion.div
+                key={`table-${viewMode}`}
+                className="v-history-table-scroll"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                style={{ height: '100%', width: '100%' }}
             >
-                <Virtuoso
-                    style={{ height: '100%' }}
-                    className="v-virtuoso-container"
-                    data={processedHistory}
-                    itemContent={(_index, version) => {
-                        if (!version) return null;
-                        return (
-                            <motion.div 
-                                className={isListView ? 'v-history-item-list-wrapper' : 'v-history-item-card-wrapper'} 
-                                data-version-id={String(version.id)}
-                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                transition={{ 
-                                    type: "spring", 
-                                    stiffness: 500, 
-                                    damping: 30,
-                                    mass: 1
-                                }}
-                                style={{ transformOrigin: 'center center' }}
-                            >
-                                <HistoryEntry 
-                                    version={version} 
-                                    searchQuery={searchQuery}
-                                    isSearchCaseSensitive={isSearchCaseSensitive}
-                                    viewMode={viewMode}
-                                />
-                            </motion.div>
-                        );
-                    }}
-                    components={{
-                        ScrollSeekPlaceholder: ({ height }: { height: number }) => (
-                            <div style={{ height }} aria-hidden />
-                        ),
-                    }}
-                />
+                <table className={clsx('v-history-table', { 'is-compact': settings.isListView })}>
+                    {renderHeader()}
+                    {table.getRowModel().rows.map(row => (
+                        <HistoryTableRow
+                            key={row.id}
+                            row={row}
+                            visibleCellCount={visibleCellCount}
+                            searchQuery={searchQuery}
+                            isSearchCaseSensitive={isSearchCaseSensitive}
+                            viewMode={viewMode as ViewMode}
+                            enableVersionNaming={settings.enableVersionNaming}
+                            enableVersionDescription={settings.enableVersionDescription}
+                            useRelativeTimestamps={settings.useRelativeTimestamps}
+                        />
+                    ))}
+                </table>
             </motion.div>
         );
     };
 
     return (
         <div className={clsx('v-history-list-container', { 'is-panel-active': isPanelOpen })}>
-            <div 
-                className={clsx('v-history-list', { 'is-list-view': isListView })}
-                style={{ height: '100%', position: 'relative' }}
-            >
-                <AnimatePresence mode="wait">
-                    {renderContent()}
-                </AnimatePresence>
+            <div className="v-history-list">
+                <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
             </div>
         </div>
     );
