@@ -23,10 +23,11 @@ type VersionActionId = (typeof versionActions)[number]['id'];
 type VersionActionGroup = readonly VersionActionId[];
 
 const VERSION_ACTION_GROUPS: readonly VersionActionGroup[] = [
-    ['copy-path', 'deviation', 'export-single'],
-    ['diff', 'edit'],
-    ['restore'],
-    ['delete', 'replace'],
+    ['diff'],
+    ['restore', 'deviation'],
+    ['copy-path', 'export-single'],
+    ['edit'],
+    ['replace', 'delete'],
 ];
 
 const isProbablyAbsolutePath = (value: string): boolean => {
@@ -142,7 +143,8 @@ const showVersionActionMenu = (
             });
     });
 
-    // Group related commands so long action lists stay scannable in Obsidian's native menu.
+    // Follow the familiar desktop context-menu flow: inspect, act on the content,
+    // copy/export, edit metadata, then finish with destructive actions.
     for (const group of VERSION_ACTION_GROUPS) {
         const groupActions = group
             .map(actionId => actionMap.get(actionId))
