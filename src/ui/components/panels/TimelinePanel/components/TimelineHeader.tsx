@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import clsx from 'clsx';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Menu } from 'obsidian';
 import { useAppDispatch, useAppSelector } from '@/ui/hooks';
 import { thunks } from '@/state';
 import { Icon } from '@/ui/components';
@@ -27,40 +27,33 @@ export const TimelineHeader: FC<TimelineHeaderProps> = ({
     const handleToggleViewMode = () => dispatch(thunks.toggleViewMode());
     const handleOpenBranchDrawer = () => dispatch(thunks.showBranchSwitcher());
     const handleOpenDashboard = () => dispatch(thunks.openDashboard());
+    const handleOpenMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        const menu = new Menu();
+        menu.addItem(item => item
+            .setTitle(switchViewLabel)
+            .setIcon(viewMode === 'versions' ? 'file-edit' : 'history')
+            .onClick(handleToggleViewMode));
+        menu.addSeparator();
+        menu.addItem(item => item.setTitle('Branches').setIcon('git-branch').onClick(handleOpenBranchDrawer));
+        menu.addItem(item => item.setTitle('Dashboard').setIcon('layout-dashboard').onClick(handleOpenDashboard));
+        menu.showAtMouseEvent(event.nativeEvent);
+    };
 
     return (
         <div className="v-timeline-header-container">
             <div className={clsx("v-timeline-toolbar", { "is-searching": searchState.isSearchActive })}>
                 {/* Normal Toolbar Content */}
                 <div className="v-timeline-toolbar-content">
-                    <DropdownMenu.Root>
-                        <DropdownMenu.Trigger asChild>
-                            <button
-                                className="clickable-icon"
-                                aria-label="Menu"
-                                disabled={isBusy}
-                            >
-                                <Icon name="menu" />
-                            </button>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Portal>
-                            <DropdownMenu.Content className="v-actionbar-dropdown-content" sideOffset={5} collisionPadding={10} align="start">
-                                <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleToggleViewMode}>
-                                    <span>{switchViewLabel}</span>
-                                    <Icon name={viewMode === 'versions' ? 'file-edit' : 'history'} />
-                                </DropdownMenu.Item>
-                                <div className="v-diff-separator" />
-                                <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenBranchDrawer}>
-                                    <span>Branches</span>
-                                    <Icon name="git-branch" />
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenDashboard}>
-                                    <span>Dashboard</span>
-                                    <Icon name="layout-dashboard" />
-                                </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                    </DropdownMenu.Root>
+                    <button
+                        className="clickable-icon"
+                        aria-label="Menu"
+                        disabled={isBusy}
+                        onClick={handleOpenMenu}
+                    >
+                        <Icon name="menu" />
+                    </button>
 
                     <div className="v-timeline-header-actions">
                         <button className="clickable-icon" onClick={searchState.handleToggleSearch} aria-label="Search">

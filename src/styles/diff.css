@@ -396,60 +396,9 @@ mark.is-active-match {
     border-radius: 2px;
 }
 
-/* --- Dropdown Menu --- */
+/* --- Diff options trigger --- */
 .v-diff-dropdown-trigger {
     padding: var(--size-4-1);
     height: calc(var(--icon-size) + var(--size-4-2));
     width: calc(var(--icon-size) + var(--size-4-2));
-}
-
-.v-diff-dropdown-content,
-.v-diff-dropdown-sub-content {
-    min-width: 180px;
-    background-color: var(--background-secondary);
-    border-radius: var(--radius-m);
-    padding: var(--size-4-1);
-    box-shadow: var(--shadow-l);
-    border: 1px solid var(--background-modifier-border);
-    z-index: 10002;
-    animation: v-fade-in 0.1s ease-out;
-}
-
-.v-diff-dropdown-item,
-.v-diff-dropdown-sub-trigger {
-    font-size: var(--font-ui-small);
-    padding: var(--size-4-2) var(--size-4-3);
-    border-radius: var(--radius-s);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    outline: none;
-    color: var(--text-normal);
-    user-select: none;
-}
-
-.v-diff-dropdown-item:hover,
-.v-diff-dropdown-item[data-highlighted],
-.v-diff-dropdown-sub-trigger:hover,
-.v-diff-dropdown-sub-trigger[data-highlighted] {
-    background-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-}
-.v-diff-dropdown-item[data-highlighted] .lucide,
-.v-diff-dropdown-sub-trigger[data-highlighted] .lucide {
-    color: var(--text-on-accent);
-}
-
-.v-diff-dropdown-item .lucide,
-.v-diff-dropdown-sub-trigger .lucide {
-    width: 14px;
-    height: 14px;
-    color: var(--text-muted);
-}
-
-.v-diff-separator {
-    height: 1px;
-    background-color: var(--background-modifier-border);
-    margin: var(--size-4-1) 0;
 }

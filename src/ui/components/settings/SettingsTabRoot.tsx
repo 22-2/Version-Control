@@ -1,5 +1,5 @@
 import { type FC, useState, useCallback } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Menu } from 'obsidian';
 import { useAppDispatch, useAppSelector } from '@/ui/hooks';
 import { appSlice } from '@/state';
 import { GlobalSettings } from './GlobalSettings';
@@ -36,31 +36,35 @@ export const SettingsTabRoot: FC = () => {
         }
     };
 
+    const handleOpenTabMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        const menu = new Menu();
+        const tabs: { id: SettingsTabId; label: string }[] = [
+            { id: 'general', label: 'General' },
+            { id: 'versions', label: 'Version History' },
+            { id: 'edits', label: 'Edit History' },
+        ];
+
+        tabs.forEach(({ id, label }) => {
+            menu.addItem(item => {
+                item
+                    .setTitle(label)
+                    .setChecked(activeTab === id)
+                    .onClick(() => handleTabChange(id));
+            });
+        });
+
+        menu.showAtMouseEvent(event.nativeEvent);
+    }, [activeTab, handleTabChange]);
+
     return (
         <div className="v-settings-tab-content">
             <div className="v-settings-tab-header">
-                <DropdownMenu.Root>
-                    <DropdownMenu.Trigger asChild>
-                        <button className="v-settings-nav-button">
-                            <span>{getTabLabel(activeTab)}</span>
-                            <Icon name="chevron-down" />
-                        </button>
-                    </DropdownMenu.Trigger>
-
-                    <DropdownMenu.Portal>
-                        <DropdownMenu.Content className="v-dropdown-content" align="start" sideOffset={5}>
-                            <DropdownMenu.Item className="v-dropdown-item" onClick={() => handleTabChange('general')}>
-                                General
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item className="v-dropdown-item" onClick={() => handleTabChange('versions')}>
-                                Version History
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item className="v-dropdown-item" onClick={() => handleTabChange('edits')}>
-                                Edit History
-                            </DropdownMenu.Item>
-                        </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                </DropdownMenu.Root>
+                <button className="v-settings-nav-button" onClick={handleOpenTabMenu}>
+                    <span>{getTabLabel(activeTab)}</span>
+                    <Icon name="chevron-down" />
+                </button>
             </div>
 
             {activeTab === 'general' && (

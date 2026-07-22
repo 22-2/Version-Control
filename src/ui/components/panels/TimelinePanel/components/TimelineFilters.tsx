@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Menu } from 'obsidian';
 import { useAppSelector } from '@/ui/hooks';
 import { Icon } from '@/ui/components';
 import type { TimelineFiltersProps } from '@/ui/components/panels/TimelinePanel/types';
@@ -24,37 +24,30 @@ export const TimelineFilters: FC<TimelineFiltersProps> = ({ settings }) => {
         });
     };
 
+    const handleOpenMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        const menu = new Menu();
+        const filters: { key: keyof TimelineSettings; title: string }[] = [
+            { key: 'showName', title: 'Show Name' },
+            { key: 'showVersionNumber', title: 'Show Version Number' },
+            { key: 'showDescription', title: 'Show Description' },
+            { key: 'showPreview', title: 'Show Preview' },
+            { key: 'expandByDefault', title: 'Expand Cards by Default' },
+        ];
+
+        filters.forEach(({ key, title }) => {
+            menu.addItem(item => item
+                .setTitle(title)
+                .setChecked(settings[key])
+                .onClick(() => toggle(key)));
+        });
+        menu.showAtMouseEvent(event.nativeEvent);
+    };
+
     return (
-        <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-                <button className="clickable-icon" aria-label="Timeline Settings">
-                    <Icon name="settings-2" />
-                </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-                <DropdownMenu.Content className="v-actionbar-dropdown-content" sideOffset={5} collisionPadding={10}>
-                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={(e) => { e.preventDefault(); toggle('showName'); }}>
-                        <span>Show Name</span>
-                        {settings.showName && <Icon name="check" />}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={(e) => { e.preventDefault(); toggle('showVersionNumber'); }}>
-                        <span>Show Version Number</span>
-                        {settings.showVersionNumber && <Icon name="check" />}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={(e) => { e.preventDefault(); toggle('showDescription'); }}>
-                        <span>Show Description</span>
-                        {settings.showDescription && <Icon name="check" />}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={(e) => { e.preventDefault(); toggle('showPreview'); }}>
-                        <span>Show Preview</span>
-                        {settings.showPreview && <Icon name="check" />}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={(e) => { e.preventDefault(); toggle('expandByDefault'); }}>
-                        <span>Expand Cards by Default</span>
-                        {settings.expandByDefault && <Icon name="check" />}
-                    </DropdownMenu.Item>
-                </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <button className="clickable-icon" aria-label="Timeline Settings" onClick={handleOpenMenu}>
+            <Icon name="settings-2" />
+        </button>
     );
 };

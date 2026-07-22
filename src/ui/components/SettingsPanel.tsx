@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { type FC, memo, useState, useEffect, type SyntheticEvent } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Menu } from 'obsidian';
+import { type FC, memo, useState, useEffect, type SyntheticEvent, useCallback } from 'react';
 import { useAppDispatch, useAppSelector, useObsidianComponent } from '@/ui/hooks';
 import { GlobalSettings } from './settings/GlobalSettings';
 import { NoteSpecificSettings } from './settings/NoteSpecificSettings';
@@ -19,9 +19,7 @@ const SettingsPanelComponent: FC = () => {
     const isActive = useAppSelector(state => state.app.panel?.type === 'settings');
     const viewMode = useAppSelector(state => state.app.viewMode);
     
-    const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null);
     const [isAdvancedMode, setIsAdvancedMode] = useState(false);
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     // Manage Obsidian Component lifecycle for window events
@@ -49,98 +47,49 @@ const SettingsPanelComponent: FC = () => {
         // No explicit cleanup return needed as component.unload() handles it
     }, [component]);
 
-    useEffect(() => {
-        if (!isActive) {
-            setIsMenuOpen(false);
-        }
-    }, [isActive]);
+    const handleOpenSettingsMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        stopPropagation(event);
+
+        const menu = new Menu();
+        menu.addItem(item => item.setTitle('Actions').setIsLabel(true));
+        menu.addItem(item => item.setTitle('Refresh history').setIcon('refresh-cw').onClick(handleRefresh));
+        menu.addItem(item => item
+            .setTitle('Export history')
+            .setIcon('download-cloud')
+            .setDisabled(!noteId)
+            .onClick(handleExport));
+        menu.addSeparator();
+        menu.addItem(item => item.setTitle('View changelog').setIcon('file-text').onClick(handleViewChangelog));
+        menu.addItem(item => item.setTitle('Report issue').setIcon('bug').onClick(handleReportIssue));
+        menu.addSeparator();
+        menu.addItem(item => item
+            .setTitle(deleteLabel)
+            .setIcon('trash-2')
+            .setWarning(true)
+            .setDisabled(!noteId || !hasItems)
+            .onClick(handleDeleteAll));
+        menu.addSeparator();
+        menu.addItem(item => item
+            .setTitle(isAdvancedMode ? 'Basic settings' : 'Advanced settings')
+            .onClick(() => setIsAdvancedMode(value => !value)));
+
+        menu.showAtMouseEvent(event.nativeEvent);
+    }, [deleteLabel, handleDeleteAll, handleExport, handleRefresh, handleReportIssue, handleViewChangelog, hasItems, isAdvancedMode, noteId]);
 
     const settingsMenu = (
-        <DropdownMenu.Root open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-            <DropdownMenu.Trigger asChild>
-                <button 
-                    className="clickable-icon" 
-                    aria-label="Settings options"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <Icon name="more-horizontal" />
-                </button>
-            </DropdownMenu.Trigger>
-
-            <DropdownMenu.Portal>
-                <DropdownMenu.Content 
-                    className="v-dropdown-content" 
-                    align="end" 
-                    sideOffset={5}
-                    collisionBoundary={rootElement}
-                    collisionPadding={8}
-                    onPointerDown={stopPropagation}
-                    onMouseDown={stopPropagation}
-                    onClick={stopPropagation}
-                    style={{ zIndex: 100 }}
-                >
-                    <DropdownMenu.Sub>
-                        <DropdownMenu.SubTrigger className="v-dropdown-item v-dropdown-sub-trigger">
-                            <span>Actions</span>
-                            <div className="v-dropdown-right-slot">
-                                <Icon name="chevron-right" />
-                            </div>
-                        </DropdownMenu.SubTrigger>
-                        
-                        <DropdownMenu.Portal>
-                            <DropdownMenu.SubContent 
-                                className="v-dropdown-content" 
-                                sideOffset={2}
-                                alignOffset={-5}
-                                collisionPadding={8}
-                                style={{ zIndex: 105 }}
-                                onPointerDown={stopPropagation}
-                                onMouseDown={stopPropagation}
-                                onClick={stopPropagation}
-                            >
-                                <DropdownMenu.Item className="v-dropdown-item" onSelect={handleRefresh}>
-                                    <Icon name="refresh-cw" className="v-dropdown-item-icon" />
-                                    Refresh history
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item className="v-dropdown-item" onSelect={handleExport} disabled={!noteId}>
-                                    <Icon name="download-cloud" className="v-dropdown-item-icon" />
-                                    Export history
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Separator className="v-dropdown-separator" />
-                                <DropdownMenu.Item className="v-dropdown-item" onSelect={handleViewChangelog}>
-                                    <Icon name="file-text" className="v-dropdown-item-icon" />
-                                    View changelog
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item className="v-dropdown-item" onSelect={handleReportIssue}>
-                                    <Icon name="bug" className="v-dropdown-item-icon" />
-                                    Report issue
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Separator className="v-dropdown-separator" />
-                                <DropdownMenu.Item 
-                                    className="v-dropdown-item mod-warning" 
-                                    onSelect={handleDeleteAll} 
-                                    disabled={!noteId || !hasItems}
-                                >
-                                    <Icon name="trash-2" className="v-dropdown-item-icon" />
-                                    {deleteLabel}
-                                </DropdownMenu.Item>
-                            </DropdownMenu.SubContent>
-                        </DropdownMenu.Portal>
-                    </DropdownMenu.Sub>
-
-                    <DropdownMenu.Item className="v-dropdown-item" onSelect={() => setIsAdvancedMode(!isAdvancedMode)}>
-                        {isAdvancedMode ? 'Basic settings' : 'Advanced settings'}
-                    </DropdownMenu.Item>
-                </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <button
+            className="clickable-icon"
+            aria-label="Settings options"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={handleOpenSettingsMenu}
+        >
+            <Icon name="more-horizontal" />
+        </button>
     );
 
     return (
         <div 
-            ref={setRootElement}
             className={clsx("v-settings-panel", { "is-active": isActive })}
             role="dialog"
             aria-modal={isActive}
@@ -171,7 +120,6 @@ const SettingsPanelComponent: FC = () => {
                         aria-label="Close settings" 
                         onClick={(e) => {
                             stopPropagation(e);
-                            setIsMenuOpen(false);
                             dispatch(appSlice.actions.closePanel());
                         }}
                         onMouseDown={stopPropagation}

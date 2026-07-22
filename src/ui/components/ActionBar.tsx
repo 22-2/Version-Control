@@ -1,7 +1,6 @@
-import { debounce } from 'obsidian';
+import { debounce, Menu } from 'obsidian';
 import clsx from 'clsx';
 import { type FC, type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useAppDispatch, useAppSelector } from '@/ui/hooks';
 import { AppStatus } from '@/state';
 import { appSlice } from '@/state';
@@ -70,6 +69,7 @@ export const ActionBar: FC = () => {
     }, [branchesData, dispatch, noteId]);
 
     const isBusy = isProcessing || isRenaming || status === AppStatus.LOADING;
+    const switchViewLabel = viewMode === 'versions' ? 'Switch to Edit History' : 'Switch to Version History';
 
     const handleOpenDiffPanel = useCallback(() => {
         if (diffRequest?.status === 'ready') {
@@ -158,6 +158,30 @@ export const ActionBar: FC = () => {
         dispatch(thunks.toggleViewMode());
     }, [dispatch, status, isBusy]);
 
+    const handleOpenNavigationMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        const menu = new Menu();
+        menu.addItem(item => item
+            .setTitle(switchViewLabel)
+            .setIcon(viewMode === 'versions' ? 'file-edit' : 'history')
+            .onClick(handleToggleViewMode));
+        menu.addSeparator();
+        menu.addItem(item => item.setTitle('Branches').setIcon('git-branch').onClick(handleOpenBranchDrawer));
+        menu.addItem(item => item.setTitle('Timeline').setIcon('history').onClick(handleOpenTimeline));
+        menu.addItem(item => item.setTitle('Dashboard').setIcon('layout-dashboard').onClick(handleOpenDashboard));
+        menu.showAtMouseEvent(event.nativeEvent);
+    }, [handleOpenBranchDrawer, handleOpenDashboard, handleOpenTimeline, handleToggleViewMode, switchViewLabel, viewMode]);
+
+    const handleOpenDiffMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        const menu = new Menu();
+        menu.addItem(item => item.setTitle('Open in panel').setIcon('layout-sidebar-right').onClick(handleOpenDiffPanel));
+        menu.addItem(item => item.setTitle('Open in window').setIcon('app-window').onClick(handleOpenDiffWindow));
+        menu.showAtMouseEvent(event.nativeEvent);
+    }, [handleOpenDiffPanel, handleOpenDiffWindow]);
+
     const handleMenuClickUnregistered = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -193,45 +217,19 @@ export const ActionBar: FC = () => {
     const diffIndicatorAriaLabel = isDiffGenerating ? 'Diff is being generated...' : 'Diff is ready. Click to view.';
 
     const hasHistory = viewMode === 'versions' ? historyCount > 0 : editHistoryCount > 0;
-    const switchViewLabel = viewMode === 'versions' ? 'Switch to Edit History' : 'Switch to Version History';
-
     return (
         <div className={clsx('v-actions-container', { 'is-searching': isSearchActive })}>
             <div className="v-top-actions">
                 <div className="v-top-actions-left-group">
                     {noteId ? (
-                        <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                                <button
-                                    className="clickable-icon"
-                                    aria-label="More options"
-                                    disabled={isBusy}
-                                >
-                                    <Icon name="menu" />
-                                </button>
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                                <DropdownMenu.Content className="v-actionbar-dropdown-content" sideOffset={5} collisionPadding={10}>
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleToggleViewMode}>
-                                        <span>{switchViewLabel}</span>
-                                        <Icon name={viewMode === 'versions' ? 'file-edit' : 'history'} />
-                                    </DropdownMenu.Item>
-                                    <div className="v-diff-separator" />
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenBranchDrawer}>
-                                        <span>Branches</span>
-                                        <Icon name="git-branch" />
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenTimeline}>
-                                        <span>Timeline</span>
-                                        <Icon name="history" />
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenDashboard}>
-                                        <span>Dashboard</span>
-                                        <Icon name="layout-dashboard" />
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
+                        <button
+                            className="clickable-icon"
+                            aria-label="More options"
+                            disabled={isBusy}
+                            onClick={handleOpenNavigationMenu}
+                        >
+                            <Icon name="menu" />
+                        </button>
                     ) : (
                         <button
                             className="clickable-icon"
@@ -257,29 +255,14 @@ export const ActionBar: FC = () => {
                 </div>
                 <div className="v-top-actions-right-group">
                     {diffRequest?.status === 'ready' ? (
-                        <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                                <button 
-                                    className={diffIndicatorClasses} 
-                                    aria-label={diffIndicatorAriaLabel}
-                                    disabled={isBusy}
-                                >
-                                    <Icon name={diffIndicatorIcon} />
-                                </button>
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                                <DropdownMenu.Content className="v-actionbar-dropdown-content" sideOffset={5} collisionPadding={10}>
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenDiffPanel}>
-                                        <span>Open in panel</span>
-                                        <Icon name="layout-sidebar-right" />
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item className="v-actionbar-dropdown-item" onSelect={handleOpenDiffWindow}>
-                                        <span>Open in window</span>
-                                        <Icon name="app-window" />
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
+                        <button
+                            className={diffIndicatorClasses}
+                            aria-label={diffIndicatorAriaLabel}
+                            disabled={isBusy}
+                            onClick={handleOpenDiffMenu}
+                        >
+                            <Icon name={diffIndicatorIcon} />
+                        </button>
                     ) : (
                         <button 
                             className={diffIndicatorClasses} 

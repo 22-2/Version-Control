@@ -1,6 +1,6 @@
-import type { FC, ReactNode } from 'react';
+import type { FC } from 'react';
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Menu } from 'obsidian';
 
 import type { VirtuosoHandle, ListRange } from 'react-virtuoso';
 import clsx from 'clsx';
@@ -22,60 +22,56 @@ interface DiffPanelProps {
 
 type ViewLayout = 'split' | 'unified';
 
-const DiffOptionsDropdown: FC<{ 
+const DiffOptionsButton: FC<{
     currentType: DiffType; 
     currentLayout: ViewLayout;
     onSelectType: (type: DiffType) => void; 
     onSelectLayout: (layout: ViewLayout) => void;
-    children: ReactNode 
-}> = ({ currentType, currentLayout, onSelectType, onSelectLayout, children }) => (
-    <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>{children}</DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-            <DropdownMenu.Content className="v-diff-dropdown-content" sideOffset={5} collisionPadding={10}>
-                
-                <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectLayout('unified')}>
-                    <span>Unified View</span>
-                    {currentLayout === 'unified' && <Icon name="check" />}
-                </DropdownMenu.Item>
-                <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectLayout('split')}>
-                    <span>Side-by-Side View</span>
-                    {currentLayout === 'split' && <Icon name="check" />}
-                </DropdownMenu.Item>
+    disabled: boolean;
+}> = ({ currentType, currentLayout, onSelectType, onSelectLayout, disabled }) => {
+    const handleOpenMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
 
-                <DropdownMenu.Separator className="v-diff-separator" />
+        const menu = new Menu();
+        menu.addItem(item => item.setTitle('Layout').setIsLabel(true));
+        menu.addItem(item => item
+            .setTitle('Unified View')
+            .setChecked(currentLayout === 'unified')
+            .onClick(() => onSelectLayout('unified')));
+        menu.addItem(item => item
+            .setTitle('Side-by-Side View')
+            .setChecked(currentLayout === 'split')
+            .onClick(() => onSelectLayout('split')));
+        menu.addSeparator();
+        menu.addItem(item => item.setTitle('Diff Mode').setIsLabel(true));
 
-                <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger className="v-diff-dropdown-sub-trigger">
-                        <span>Diff Mode</span>
-                        <Icon name="chevron-right" />
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.Portal>
-                        <DropdownMenu.SubContent className="v-diff-dropdown-sub-content" sideOffset={2} alignOffset={-5}>
-                            <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectType('smart')}>
-                                <span>Smart Diff</span>
-                                {currentType === 'smart' && <Icon name="check" />}
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectType('lines')}>
-                                <span>Line Diff</span>
-                                {currentType === 'lines' && <Icon name="check" />}
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectType('words')}>
-                                <span>Word Diff</span>
-                                {currentType === 'words' && <Icon name="check" />}
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item className="v-diff-dropdown-item" onSelect={() => onSelectType('chars')}>
-                                <span>Character Diff</span>
-                                {currentType === 'chars' && <Icon name="check" />}
-                            </DropdownMenu.Item>
-                        </DropdownMenu.SubContent>
-                    </DropdownMenu.Portal>
-                </DropdownMenu.Sub>
+        const modes: { type: DiffType; title: string }[] = [
+            { type: 'smart', title: 'Smart Diff' },
+            { type: 'lines', title: 'Line Diff' },
+            { type: 'words', title: 'Word Diff' },
+            { type: 'chars', title: 'Character Diff' },
+        ];
+        modes.forEach(({ type, title }) => {
+            menu.addItem(item => item
+                .setTitle(title)
+                .setChecked(currentType === type)
+                .onClick(() => onSelectType(type)));
+        });
 
-            </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-);
+        menu.showAtMouseEvent(event.nativeEvent);
+    };
+
+    return (
+        <button
+            className="clickable-icon v-diff-dropdown-trigger"
+            aria-label="Diff options"
+            onClick={handleOpenMenu}
+            disabled={disabled}
+        >
+            <Icon name="git-commit-horizontal" />
+        </button>
+    );
+};
 
 const transformDiffChanges = (changes: any[]): Change[] => {
     return changes.map(change => ({
@@ -296,16 +292,13 @@ export const DiffPanel: FC<DiffPanelProps> = ({ panelState }) => {
                         <div className="v-panel-header-actions">
                             <button className="clickable-icon" onClick={search.handleToggleSearch} disabled={isBusy}><Icon name="search" /></button>
                             
-                            <DiffOptionsDropdown 
+                            <DiffOptionsButton
                                 currentType={diffType} 
                                 currentLayout={viewLayout}
                                 onSelectType={handleDiffTypeChange}
                                 onSelectLayout={setViewLayout}
-                            >
-                                <button className="clickable-icon v-diff-dropdown-trigger" onClick={e => e.stopPropagation()} disabled={isBusy}>
-                                    <Icon name="git-commit-horizontal" />
-                                </button>
-                            </DiffOptionsDropdown>
+                                disabled={isBusy}
+                            />
 
                             {!isWindowMode && <button className="clickable-icon v-panel-close" onClick={handleClose}><Icon name="x" /></button>}
                         </div>

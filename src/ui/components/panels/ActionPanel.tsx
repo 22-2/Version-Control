@@ -1,8 +1,7 @@
-import { debounce } from 'obsidian';
+import { debounce, Menu } from 'obsidian';
 import clsx from 'clsx';
 import { type FC, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useAppDispatch } from '@/ui/hooks';
 import type { ActionPanel as ActionPanelState, ActionItem } from '@/state';
 import { Icon } from '@/ui/components';
@@ -28,7 +27,6 @@ interface ItemComponentProps {
 
 const ItemComponent: FC<ItemComponentProps> = memo(({ item, isFocused, isDrawer, contextActions, onChoose, onFocus, onContextAction }) => {
     const itemRef = useRef<HTMLDivElement>(null);
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     useEffect(() => {
         if (isFocused) {
@@ -38,29 +36,37 @@ const ItemComponent: FC<ItemComponentProps> = memo(({ item, isFocused, isDrawer,
 
     const iconToShow = item.isSelected ? 'check' : item.icon;
 
-    const handleContextMenu = useCallback((e: React.MouseEvent) => {
-        if (contextActions && contextActions.length > 0) {
-            e.preventDefault();
-            setIsMenuOpen(true);
-        }
-    }, [contextActions]);
+    const handleContextMenu = useCallback((event: React.MouseEvent) => {
+        if (!contextActions || contextActions.length === 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const menu = new Menu();
+        contextActions.forEach(action => {
+            menu.addItem(menuItem => {
+                menuItem
+                    .setTitle(action.text)
+                    .setIcon(action.icon ?? null)
+                    .onClick(() => onContextAction?.(action.id));
+            });
+        });
+        menu.showAtMouseEvent(event.nativeEvent);
+    }, [contextActions, onContextAction]);
 
     // Helper to render the trigger icon if actions exist
     const renderTrigger = () => {
         if (!contextActions || contextActions.length === 0) return null;
         
         return (
-            <DropdownMenu.Trigger asChild>
-                <div 
-                    className="v-action-item-more" 
-                    onClick={(e) => { 
-                        e.stopPropagation(); 
-                        // Trigger handles state toggle automatically
-                    }}
-                >
-                    <Icon name="more-vertical" />
-                </div>
-            </DropdownMenu.Trigger>
+            <button
+                type="button"
+                className="clickable-icon v-action-item-more"
+                aria-label={`More options for ${item.text}`}
+                onClick={handleContextMenu}
+            >
+                <Icon name="more-vertical" />
+            </button>
         );
     };
 
@@ -88,33 +94,6 @@ const ItemComponent: FC<ItemComponentProps> = memo(({ item, isFocused, isDrawer,
             {renderTrigger()}
         </div>
     );
-
-    if (contextActions && contextActions.length > 0) {
-        return (
-            <DropdownMenu.Root open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-                {isDrawer ? <div className="v-action-panel-list-item-wrapper">{content}</div> : content}
-                
-                <DropdownMenu.Portal>
-                    <DropdownMenu.Content className="v-actionbar-dropdown-content" sideOffset={5} collisionPadding={10} align="end">
-                        {contextActions.map(action => (
-                            <DropdownMenu.Item 
-                                key={action.id} 
-                                className="v-actionbar-dropdown-item" 
-                                onSelect={(e) => {
-                                    e.preventDefault();
-                                    setIsMenuOpen(false);
-                                    onContextAction?.(action.id);
-                                }}
-                            >
-                                <span>{action.text}</span>
-                                {action.icon && <Icon name={action.icon} />}
-                            </DropdownMenu.Item>
-                        ))}
-                    </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-        );
-    }
 
     return isDrawer ? <div className="v-action-panel-list-item-wrapper">{content}</div> : content;
 });
