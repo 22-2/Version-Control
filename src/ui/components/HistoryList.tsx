@@ -31,6 +31,26 @@ import { useGetVersionHistoryQuery, useGetEditHistoryQuery } from '@/state/apis/
 
 const SORTABLE_COLUMN_IDS = new Set<SortProperty>(['versionNumber', 'timestamp', 'name', 'size']);
 
+const HistoryTimestampCell: FC<{
+    version: VersionHistoryEntry;
+    searchQuery: string;
+    isSearchCaseSensitive: boolean;
+    useRelativeTimestamps: boolean;
+}> = ({ version, searchQuery, isSearchCaseSensitive, useRelativeTimestamps }) => {
+    const { now } = useTime();
+    const { timestampText, tooltipTimestamp } = formatTimestamp(version.timestamp, useRelativeTimestamps, now);
+
+    return (
+        <span title={tooltipTimestamp}>
+            <HighlightedText
+                text={timestampText}
+                {...(searchQuery && { query: searchQuery })}
+                caseSensitive={isSearchCaseSensitive}
+            />
+        </span>
+    );
+};
+
 const EmptyState: FC<{ icon: string; title: string; subtitle?: string }> = ({ icon, title, subtitle }) => (
     <motion.div
         className="v-empty-state"
@@ -62,7 +82,6 @@ interface HistoryListProps {
 
 export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
     const dispatch = useAppDispatch();
-    const { now } = useTime();
     const status = useAppSelector(state => state.app.status);
     const noteId = useAppSelector(state => state.app.noteId);
     const viewMode = useAppSelector(state => state.app.viewMode);
@@ -172,22 +191,14 @@ export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
                 id: 'timestamp',
                 accessorFn: row => Date.parse(row.timestamp) || 0,
                 header: 'Date',
-                cell: ({ row }) => {
-                    const { timestampText, tooltipTimestamp } = formatTimestamp(
-                        row.original.timestamp,
-                        settings.useRelativeTimestamps,
-                        now
-                    );
-                    return (
-                        <span title={tooltipTimestamp}>
-                            <HighlightedText
-                                text={timestampText}
-                                {...(searchQuery && { query: searchQuery })}
-                                caseSensitive={isSearchCaseSensitive}
-                            />
-                        </span>
-                    );
-                },
+                cell: ({ row }) => (
+                    <HistoryTimestampCell
+                        version={row.original}
+                        searchQuery={searchQuery}
+                        isSearchCaseSensitive={isSearchCaseSensitive}
+                        useRelativeTimestamps={settings.useRelativeTimestamps}
+                    />
+                ),
                 sortDescFirst: true,
                 size: 152,
             },
@@ -236,7 +247,7 @@ export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
             });
         }
         return [...baseColumns, ...statColumns];
-    }, [enableCompression, isSearchCaseSensitive, now, searchQuery, settings, viewMode]);
+    }, [enableCompression, isSearchCaseSensitive, searchQuery, settings, viewMode]);
 
     const sorting = useMemo<SortingState>(() => isSearching ? [] : [{
         id: sortOrder.property,
@@ -384,7 +395,6 @@ export const HistoryList: FC<HistoryListProps> = ({ onCountChange }) => {
                             viewMode={viewMode as ViewMode}
                             enableVersionNaming={settings.enableVersionNaming}
                             enableVersionDescription={settings.enableVersionDescription}
-                            useRelativeTimestamps={settings.useRelativeTimestamps}
                         />
                     ))}
                 </table>

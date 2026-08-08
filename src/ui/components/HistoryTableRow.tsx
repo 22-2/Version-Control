@@ -1,14 +1,12 @@
 import clsx from 'clsx';
-import { createContext, type FC, type RefObject, useContext, useId, useMemo, useRef } from 'react';
+import { createContext, memo, type FC, type RefObject, useContext, useId, useMemo, useRef } from 'react';
 import { flexRender, type Row } from '@tanstack/react-table';
 import type { VersionHistoryEntry, ViewMode } from '@/types';
 import { useAppSelector } from '@/ui/hooks';
-import { useTime } from '@/ui/contexts';
 import { HighlightedText } from '@/ui/components/shared/HighlightedText';
 import { Icon } from '@/ui/components/Icon';
 import { EntryEditor } from '@/ui/components/HistoryEntry/components';
 import { useEntryActions, useEntryEdit, useEntryHighlight } from '@/ui/components/HistoryEntry/hooks';
-import { formatTimestamp } from '@/ui/components/HistoryEntry/utils';
 import { MAX_NAME_LENGTH } from '@/ui/components/HistoryEntry/types';
 
 interface HistoryTableRowContextValue {
@@ -125,10 +123,9 @@ interface HistoryTableRowProps {
     viewMode: ViewMode;
     enableVersionNaming: boolean;
     enableVersionDescription: boolean;
-    useRelativeTimestamps: boolean;
 }
 
-export const HistoryTableRow: FC<HistoryTableRowProps> = ({
+export const HistoryTableRow: FC<HistoryTableRowProps> = memo(({
     row,
     visibleCellCount,
     searchQuery,
@@ -136,7 +133,6 @@ export const HistoryTableRow: FC<HistoryTableRowProps> = ({
     viewMode,
     enableVersionNaming,
     enableVersionDescription,
-    useRelativeTimestamps,
 }) => {
     const version = row.original;
     const { namingVersionId, highlightedVersionId, isManualVersionEdit } = useAppSelector(state => ({
@@ -144,7 +140,6 @@ export const HistoryTableRow: FC<HistoryTableRowProps> = ({
         highlightedVersionId: state.app.highlightedVersionId,
         isManualVersionEdit: state.app.isManualVersionEdit,
     }));
-    const { now } = useTime();
     const rowGroupRef = useRef<HTMLTableSectionElement | null>(null);
     const nameInputRef = useRef<HTMLInputElement | null>(null);
     const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -188,10 +183,6 @@ export const HistoryTableRow: FC<HistoryTableRowProps> = ({
     const showNameEditor = isNamingThisVersion && (isManualVersionEdit || enableVersionNaming);
     const showDescriptionEditor = isNamingThisVersion && (isManualVersionEdit || enableVersionDescription);
     const showDescriptionRow = showDescriptionEditor || (hasDescription && row.getIsExpanded());
-    const { tooltipTimestamp } = useMemo(
-        () => formatTimestamp(version.timestamp, useRelativeTimestamps, now),
-        [now, useRelativeTimestamps, version.timestamp]
-    );
 
     const contextValue = useMemo<HistoryTableRowContextValue>(() => ({
         version,
@@ -240,7 +231,6 @@ export const HistoryTableRow: FC<HistoryTableRowProps> = ({
                     className="v-history-table-row"
                     tabIndex={0}
                     aria-selected={version.id === highlightedVersionId}
-                    title={tooltipTimestamp}
                 >
                     {row.getVisibleCells().map(cell => (
                         <td key={cell.id} data-column-id={cell.column.id}>
@@ -275,4 +265,6 @@ export const HistoryTableRow: FC<HistoryTableRowProps> = ({
             </tbody>
         </HistoryTableRowContext.Provider>
     );
-};
+});
+
+HistoryTableRow.displayName = 'HistoryTableRow';
