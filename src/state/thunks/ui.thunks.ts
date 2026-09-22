@@ -134,14 +134,14 @@ const showVersionActionMenu = (
     const actionMap = new Map(actionsList.map(action => [action.id, action]));
 
     // Keep secondary actions in Obsidian's menu so card mode stays visually compact.
-    menu.addItem(item => {
-        item
-            .setTitle('Preview in panel')
-            .setIcon('eye')
-            .onClick(() => {
-                services.store.dispatch(viewVersionInPanel(version));
-            });
-    });
+    // menu.addItem(item => {
+    //     item
+    //         .setTitle('Preview in panel')
+    //         .setIcon('eye')
+    //         .onClick(() => {
+    //             services.store.dispatch(viewVersionInPanel(version));
+    //         });
+    // });
 
     // Follow the familiar desktop context-menu flow: inspect, act on the content,
     // copy/export, edit metadata, then finish with destructive actions.
@@ -208,13 +208,13 @@ export const toggleViewMode = (): AppThunk => async (dispatch, getState, service
     lastToggleTime = now;
 
     if (shouldAbort(services, getState)) return;
-    
+
     // Defensive check for settings availability
     if (!services.plugin?.settings) {
         console.warn("Version Control: Plugin settings not available in toggleViewMode");
         return;
     }
-    
+
     const state = getState().app;
     const currentMode = state.viewMode;
     const newMode: ViewMode = currentMode === 'versions' ? 'edits' : 'versions';
@@ -227,25 +227,25 @@ export const toggleViewMode = (): AppThunk => async (dispatch, getState, service
              const historyResult = historyApi.endpoints.getVersionHistory.select(noteId)(getState());
              versionCount = historyResult.data?.length ?? 0;
         }
-        
+
         if (versionCount === 0) {
             services.uiService.showNotice("Cannot access Edit History for base files until a version is saved.", 5000);
             return;
         }
     }
-    
+
     // 1. Pre-emptively reset effective settings to global defaults for the new mode
     const plugin = services.plugin;
-    const globalDefaults = newMode === 'versions' 
-        ? plugin.settings.versionHistorySettings 
+    const globalDefaults = newMode === 'versions'
+        ? plugin.settings.versionHistorySettings
         : plugin.settings.editHistorySettings;
-    
+
     dispatch(appSlice.actions.updateEffectiveSettings({ ...globalDefaults, isGlobal: true }));
 
     // 2. Update State (This clears panel, diffRequest, etc. and sets status to LOADING)
     // This also increments contextVersion, invalidating previous loads.
     dispatch(appSlice.actions.setViewMode(newMode));
-    
+
     // Capture the new context version
     const contextVersion = getState().app.contextVersion;
 
@@ -263,7 +263,7 @@ export const toggleViewMode = (): AppThunk => async (dispatch, getState, service
         // STRICT SYNCHRONIZATION:
         // We must await settings resolution BEFORE loading history.
         await dispatch(loadEffectiveSettingsForNote(noteId));
-        
+
         // Race Check: Ensure context matches after settings load
         if (shouldAbort(services, getState, { contextVersion })) return;
 
@@ -279,7 +279,7 @@ export const toggleViewMode = (): AppThunk => async (dispatch, getState, service
 
 export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRequest?: boolean } = {}): AppThunk => async (dispatch, getState, services) => {
     if (shouldAbort(services, getState)) return;
-    
+
     const { isManualRequest = true } = options;
     const plugin = services.plugin;
     const currentState = getState().app;
@@ -300,7 +300,7 @@ export const showChangelogPanel = (options: { forceRefresh?: boolean; isManualRe
     }
 
     dispatch(appSlice.actions.openPanel({ type: 'changelog' }));
-    
+
     await updateVersionInSettings(services);
 };
 
@@ -310,7 +310,7 @@ export const processQueuedChangelogRequest = (): AppThunk => (dispatch, _getStat
 
     const request = plugin.queuedChangelogRequest;
     if (request) {
-        plugin.queuedChangelogRequest = null; 
+        plugin.queuedChangelogRequest = null;
         dispatch(showChangelogPanel(request));
     }
 };
@@ -328,7 +328,7 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
         uiService.showNotice("VC: Cannot create a deviation from this version/edit because the note context changed.");
         return;
     }
-    
+
     const folders = app.vault.getAllFolders();
     const items: ActionItem<TFolder>[] = folders.map(folder => ({
         id: folder.path,
@@ -340,7 +340,7 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
         if (shouldAbort(services, getState)) return;
         const versionManager = services.versionManager;
         const editHistoryManager = services.editHistoryManager;
-        
+
         dispatch(appSlice.actions.closePanel());
 
         // Race Check: Ensure context matches after panel close and before async ops
@@ -348,7 +348,7 @@ export const createDeviation = (version: VersionHistoryEntry): AppThunk => async
             uiService.showNotice("VC: Deviation cancelled because the note context changed during folder selection.");
             return;
         }
-        
+
         try {
             let newFile: TFile | null = null;
             const viewMode = getState().app.viewMode;
@@ -446,7 +446,7 @@ export const showSortMenu = (): AppThunk => (dispatch, getState, services) => {
     const state = getState().app;
 
     if (state.status !== AppStatus.READY) return;
-    
+
     const sortOptions: { label: string; property: SortProperty; direction: SortDirection }[] = [
         { label: 'Version (new to old)', property: 'versionNumber', direction: 'desc' },
         { label: 'Version (old to new)', property: 'versionNumber', direction: 'asc' },
@@ -553,7 +553,7 @@ export const openDashboard = (): AppThunk => (dispatch, getState, services) => {
 
 export const openPreview = (version: VersionHistoryEntry): AppThunk => (dispatch, getState, services) => {
     if (shouldAbort(services, getState)) return;
-    
+
     dispatch(appSlice.actions.openPanel({
         type: 'preview',
         version

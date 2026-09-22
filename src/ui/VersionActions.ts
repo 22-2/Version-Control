@@ -1,4 +1,4 @@
-import type { AppStore } from '@/state'; 
+import type { AppStore } from '@/state';
 import type { VersionHistoryEntry } from '@/types';
 import { thunks } from '@/state';
 
@@ -35,13 +35,6 @@ export const versionActions: VersionActionConfig[] = [
         actionHandler: (version, store) => store.dispatch(thunks.requestRestore(version)),
     },
     {
-        id: 'diff',
-        title: 'Diff this version',
-        icon: 'diff',
-        tooltip: 'Compare this version with another',
-        actionHandler: (version, store) => store.dispatch(thunks.requestDiff(version)),
-    },
-    {
         id: 'edit',
         title: 'Edit Details',
         icon: 'edit-3',
@@ -49,25 +42,11 @@ export const versionActions: VersionActionConfig[] = [
         actionHandler: (version, store) => store.dispatch(thunks.requestEditVersion(version)),
     },
     {
-        id: 'deviation',
-        title: 'Create new note from version',
-        icon: 'git-branch', 
-        tooltip: 'Create a new note using this version\'s content',
-        actionHandler: (version, store) => store.dispatch(thunks.createDeviation(version)),
-    },
-    {
-        id: 'export-single',
-        title: 'Export this version',
-        icon: 'download',
-        tooltip: 'Export this specific version to a file',
-        actionHandler: (version, store) => store.dispatch(thunks.requestExportSingleVersion(version)),
-    },
-    {
         id: 'delete',
         title: 'Delete this version',
-        icon: 'trash-2', 
+        icon: 'trash-2',
         tooltip: 'Permanently delete this version',
-        isDanger: true, 
+        isDanger: true,
         actionHandler: (version, store) => store.dispatch(thunks.requestDelete(version)),
     },
     {
