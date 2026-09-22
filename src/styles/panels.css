@@ -16,7 +16,9 @@
     background-color: var(--background-secondary);
 }
 
-.v-panel-container.is-active {
+/* Scope panel visibility to the plugin: generic .is-active snippets can apply
+   blend modes to the entire overlay, making even opaque content show history. */
+.v-panel-container.v-panel-active {
     display: flex;
     flex-direction: column;
 }
@@ -146,7 +148,7 @@
     flex-direction: column;
     justify-content: flex-start;
     /* Offset to match heatmap top padding (approx month label height) */
-    padding-top: 20px; 
+    padding-top: 20px;
     padding-right: 6px;
     font-size: 10px;
     color: var(--text-muted);
@@ -428,7 +430,7 @@
     align-items: center;
     border-bottom: 1px solid var(--background-modifier-border);
     /* Ensure it doesn't overflow the container */
-    min-width: 0; 
+    min-width: 0;
 }
 
 /* Search Icon: Static position inside flex container */
@@ -529,15 +531,15 @@
 }
 
 
-.v-confirmation-panel { 
+.v-confirmation-panel {
     text-align: center;
-    padding: var(--size-4-6); 
-    gap: var(--size-4-3); 
+    padding: var(--size-4-6);
+    gap: var(--size-4-3);
 }
 .v-confirmation-panel .modal-buttons {
     display: flex;
     justify-content: center;
-    gap: var(--size-4-3); 
+    gap: var(--size-4-3);
     margin-top: var(--size-4-4);
 }
 .v-preview-panel-content, .v-diff-panel-content {
@@ -548,7 +550,7 @@
     display: flex;
     flex-direction: column;
     /* Keep overlay panels opaque even when the host theme changes panel backgrounds. */
-    background-color: var(--background-secondary);
+    background-color: var(--background-secondary) !important;
 }
 .v-version-content-preview {
     background-color: var(--background-secondary);

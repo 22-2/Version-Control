@@ -234,7 +234,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({ panelState }) => {
 
     return (
         <div 
-            className={clsx("v-panel-container is-active", {
+            className={clsx("v-panel-container v-panel-active", {
                 'is-modal-like': !isDrawer,
                 'is-drawer-like': isDrawer,
             })} 

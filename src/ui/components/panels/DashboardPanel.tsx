@@ -119,7 +119,7 @@ export const DashboardPanel: React.FC = () => {
     ];
 
     return (
-        <div className="v-panel-container is-dashboard-like is-active">
+        <div className="v-panel-container is-dashboard-like v-panel-active">
             <div className="v-inline-panel is-dashboard" ref={panelRef}>
                 <div className="v-dashboard-card">
                     <div className="v-dashboard-header">

@@ -73,7 +73,7 @@ export const TimelinePanel: FC<TimelinePanelProps> = ({ panelState: _ }) => {
     }, [search.isSearchActive, handleGoToMatch]);
 
     return (
-        <div className="v-panel-container is-active is-timeline-container" onClick={handleBackdropClick}>
+        <div className="v-panel-container v-panel-active is-timeline-container" onClick={handleBackdropClick}>
             <motion.div 
                 className="v-inline-panel v-timeline-panel"
                 initial={{ opacity: 0, scale: 0.98 }}

@@ -34,7 +34,7 @@ export const ConfirmationPanel: FC<ConfirmationPanelProps> = ({ panelState }) =>
     useDelayedFocus(confirmBtnRef);
 
     return (
-        <div className="v-panel-container is-active is-modal-like" onClick={handleBackdropClick}>
+        <div className="v-panel-container v-panel-active is-modal-like" onClick={handleBackdropClick}>
             <div className="v-inline-panel v-confirmation-panel" data-confirmation-title={panelState.title}>
                 <h3>{panelState.title}</h3>
                 <p>{panelState.message}</p>

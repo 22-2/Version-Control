@@ -275,7 +275,7 @@ export const DiffPanel: FC<DiffPanelProps> = ({ panelState }) => {
     const isBusy = isLoading || isFetching;
 
     return (
-        <div className={clsx("v-panel-container is-active", { "v-panel-window-mode": isWindowMode })}>
+        <div className={clsx("v-panel-container v-panel-active", { "v-panel-window-mode": isWindowMode })}>
             <div className="v-inline-panel v-diff-panel">
                 <div className={clsx("v-panel-header", { 'is-searching': search.isSearchActive })} ref={headerRef}>
                     <div className="v-panel-header-content">

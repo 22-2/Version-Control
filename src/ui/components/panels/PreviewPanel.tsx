@@ -106,7 +106,7 @@ export const PreviewPanel: FC<PreviewPanelProps> = ({ panelState }) => {
     const versionLabel = version.name ? `V${version.versionNumber}: ${version.name}` : `Version ${version.versionNumber}`;
 
     return (
-        <div className="v-panel-container is-active">
+        <div className="v-panel-container v-panel-active">
             <div className="v-inline-panel v-preview-panel">
                 <div className="v-preview-panel-content">
                     <div className={clsx("v-panel-header", { 'is-searching': search.isSearchActive })}>

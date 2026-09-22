@@ -38,7 +38,7 @@ export const ChangelogPanel: FC<ChangelogPanelProps> = ({ panelState: _ }) => {
     }, [content, app, component]);
 
     return (
-        <div className="v-panel-container is-active">
+        <div className="v-panel-container v-panel-active">
             <div className="v-inline-panel v-preview-panel">
                 <div className="v-preview-panel-content">
                     <div className="v-panel-header">
