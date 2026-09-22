@@ -547,6 +547,8 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    /* Keep overlay panels opaque even when the host theme changes panel backgrounds. */
+    background-color: var(--background-secondary);
 }
 .v-version-content-preview {
     background-color: var(--background-secondary);
