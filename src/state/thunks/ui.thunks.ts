@@ -23,11 +23,12 @@ type VersionActionId = (typeof versionActions)[number]['id'];
 type VersionActionGroup = readonly VersionActionId[];
 
 const VERSION_ACTION_GROUPS: readonly VersionActionGroup[] = [
-    ['diff'],
-    ['restore', 'deviation'],
-    ['copy-path', 'export-single'],
+    // ['diff'],
+    ['copy-path', /*'export-single' */],
     ['edit'],
-    ['replace', 'delete'],
+    ['restore', /* 'deviation' */],
+    ['replace'],
+    ['delete'],
 ];
 
 const isProbablyAbsolutePath = (value: string): boolean => {
